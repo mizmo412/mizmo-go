@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="Mizmo Go!"/>
+  <title>Mizmo Go!</title>
+  <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: Georgia, serif; background: #F6F3EE; }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+const C = {
+  bg:"#F6F3EE",bg2:"#EDE9E2",bg3:"#E4DFD6",card:"#FDFAF6",
+  border:"#D4CEC4",text:"#2C2820",text2:"#6B635A",text3:"#9C9188",
+  accent:"#8B6F47",accent2:"#C49A6C",
+  mg:"#7DAB7D",mg2:"#D4EAD4",mo:"#C9A227",mo2:"#F5EDBA",mh:"#D4736A",mh2:"#F2D0CD",
+  pg:"#C4826A",pg2:"#F0D5CA",po:"#E8A87A",po2:"#F7E4D0",ps:"#A09088",ps2:"#E8E0D8",
+  td:"#B8941F",td2:"#FEF3C7",tp:"#5A8FA8",tp2:"#CAE8EF",tb:"#9A7FB0",tb2:"#DDD5E8",
+  pa:"#C4544A",pb:"#D4880A",pc:"#5A9A52",
+};
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MONTHS_SHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DOWS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const uid=()=>Math.random().toString(36).slice(2,9);
+const toDS=(y,m,d)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+const tomorrowDS=()=>{const d=new Date();d.setDate(d.getDate()+1);return toDS(d.getFullYear(),d.getMonth(),d.getDate());};
+const todayDS=()=>{const n=new Date();return toDS(n.getFullYear(),n.getMonth(),n.getDate());};
+
+function fmtDueDate(ds){if(!ds)return null;const[,m,d]=ds.split("-");return`${MONTHS_SHORT[parseInt(m)-1]} ${parseInt(d)}`;}
+function DueBadge({dueDate}){
+  if(!dueDate)return null;
+  const today=todayDS();
+  const overdue=dueDate<today,dueToday=dueDate===today;
+  let bg,color,border;
+  if(overdue){bg="#fde8e7";color=C.pa;border=C.pa;}
+  else if(dueToday){bg="#fef3e2";color=C.pb;border=C.pb;}
+  else{bg=C.bg2;color=C.text3;border=C.border;}
+  return <span style={{padding:"1px 6px",fontSize:".64rem",fontWeight:600,borderRadius:10,background:bg,color,border:`1px solid ${border}`,whiteSpace:"nowrap",flexShrink:0}}>{overdue?"⚠ ":dueToday?"● ":""}{fmtDueDate(dueDate)}</span>;
+}
+
+const STALE_DAYS={A:7,B:10};
+function isStale(task){
+  if(task.doneDate||task.waiting||task.inProgress)return false;
+  if(!STALE_DAYS[task.priority])return false;
+  if(task.dueDate)return false; // has a scheduled date, not stale
+  if(task.snoozedUntil&&task.snoozedUntil>todayDS())return false;
+  const added=task.addedDate||"";if(!added)return false;
+  const ref=task.snoozedUntil||added; // snooze resets the clock
+  const diff=(new Date(todayDS())-new Date(ref))/(1000*60*60*24);
+  return diff>=STALE_DAYS[task.priority];
+}
+
+const S={
+  app:{fontFamily:"Georgia, serif",background:C.bg,minHeight:"100vh",color:C.text},
+  hdr:{background:C.card,borderBottom:`1px solid ${C.border}`,padding:"4px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:200,boxShadow:"0 2px 10px rgba(44,40,32,.07)"},
+  tabbar:{display:"flex",background:C.card,borderBottom:`1px solid ${C.border}`,overflowX:"auto",padding:"0 2px",justifyContent:"space-around"},
+  panel:{padding:"10px 10px 10px 12px",maxWidth:860,margin:"0 auto",boxSizing:"border-box",width:"100%"},
+  card:{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:"0 2px 8px rgba(44,40,32,.06)",padding:"8px 8px 8px 12px",marginBottom:8,boxSizing:"border-box",width:"100%"},
+  overlay:{position:"fixed",inset:0,background:"rgba(44,40,32,.48)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20},
+  modal:{background:C.card,borderRadius:12,boxShadow:"0 6px 28px rgba(44,40,32,.14)",width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto",padding:22},
+  input:{width:"100%",padding:"7px 9px",border:`1px solid ${C.border}`,borderRadius:6,background:C.bg,fontSize:"16px",color:C.text,outline:"none",fontFamily:"inherit",boxSizing:"border-box"},
+  textarea:{width:"100%",padding:"7px 9px",border:`1px solid ${C.border}`,borderRadius:6,background:C.bg,fontSize:"16px",color:C.text,outline:"none",fontFamily:"inherit",resize:"vertical",minHeight:56,boxSizing:"border-box"},
+  select:{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:6,background:C.bg,fontSize:".88rem",color:C.text,outline:"none",fontFamily:"inherit"},
+  calGrid:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3},
+  btnIcon:{width:28,height:28,padding:0,display:"inline-flex",alignItems:"center",justifyContent:"center",borderRadius:6,background:C.bg2,border:`1px solid ${C.border}`,color:C.text2,cursor:"pointer",fontSize:".78rem"},
+  secLbl:{fontSize:".72rem",fontWeight:600,textTransform:"uppercase",letterSpacing:".08em",color:C.text3,marginBottom:6,display:"block"},
+};
+const btn=(v="ghost",x={})=>({
+  display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,border:"none",
+  fontSize:".84rem",fontWeight:500,cursor:"pointer",transition:"all .15s",
+  ...(v==="primary"?{background:C.accent,color:"#fff"}:{background:"transparent",border:`1px solid ${C.border}`,color:C.text2}),
+  ...x,
+});
+
+const SEED={moodData:{"2026-05-18":{mood:"good",words:["Accomplished"],notes:"Dealt with the yard after the windstorm. Looked like fall in my yard. Cleaned pool, blew leaves, mowed lawn. Did some work on this app, which needs a name. Perhaps Mizmo's World?  (Mizmo is a nickname.)"},"2026-05-19":{mood:"okay",words:["Energised"],notes:"Started good, but groggy in the afternoon\n"},"2026-05-20":{mood:"hard",words:["Tired","Unmotivated"],notes:"Having trouble adjusting to thyroid meds.  Groggy, weight gain, swollen ankles and feet. Slept 3hrs this afternoon. "},"2026-05-21":{mood:"okay",words:[],notes:"Apprehensive. "},"2026-05-22":{mood:"good",words:["Accomplished"]},"2026-05-23":{mood:"okay",words:["Frustrated"]},"2026-05-24":{mood:"good",words:[]},"2026-05-26":{mood:"okay",words:[]}},actData:{"2026-05-18":{phys:"okay",task:"done",words:[],notes:"Yardwork"},"2026-05-19":{phys:"okay",task:"done",words:["Stretched"],notes:"Arm and sciatica "},"2026-05-20":{phys:"skip",task:"partial",words:[],notes:""},"2026-05-21":{phys:"skip"},"2026-05-22":{phys:"skip"},"2026-05-23":{phys:"okay"},"2026-05-24":{phys:"okay"},"2026-05-26":{phys:"skip"}},tasks:[{id:"ukop70i",title:"Secure materials",notes:"Consult with Edd",priority:"A",projectId:"qp5s6mk",addedDate:"2026-05-18",doneDate:null},{id:"chrfb76",title:"Debris",notes:"Discuss with Jordan. Use his truck or get dumpster?",priority:"B",projectId:"qp5s6mk",addedDate:"2026-05-18",doneDate:null},{id:"vkiigwq",title:"Doorknobs for buffet",notes:"",priority:"B",projectId:"misc",addedDate:"2026-05-18",doneDate:"2026-05-19"},{id:"3jj0546",title:"Finish book",notes:"Loan ends in a week.",priority:"A",projectId:"misc",addedDate:"2026-05-19",doneDate:null,today:true},{id:"wns8rkg",title:"Return Amazon",notes:"",priority:"A",projectId:"misc",addedDate:"2026-05-19",doneDate:"trivial",trivial:true},{id:"wlygx6o",title:"Coordinate labor",notes:"",priority:"B",projectId:"qp5s6mk",addedDate:"2026-05-19",doneDate:null},{id:"spuzum9",title:"Research Airbnb",notes:"Mendacino.",priority:"B",projectId:"misc",addedDate:"2026-05-19",doneDate:null},{id:"xzxgq37",title:"Paint Hearth and back of kitchen island",notes:"",priority:"B",projectId:"misc",addedDate:"2026-05-19",doneDate:null},{id:"60gki6j",title:"Paint door for test",notes:"",priority:"A",projectId:"uk4ed2x",addedDate:"2026-05-19",doneDate:"2026-05-22"},{id:"u09a2aj",title:"fu Imperial Health,",priority:"A",projectId:"misc",addedDate:"2026-05-20",doneDate:null,notes:"",waiting:true,waitingOn:"Callback from Lucent."},{id:"we3m2ns",title:"solar app",priority:"A",projectId:"misc",addedDate:"2026-05-20",doneDate:null,notes:"Forward Chat convo.",waitingOn:"Michael / Underline to get contact Enphase.",inProgress:true,today:true},{id:"vcrfro7",title:"Labwork",notes:"Next dr appt is June 2.",priority:"B",projectId:"misc",addedDate:"2026-05-20",doneDate:null,dueDate:"2026-05-26"},{id:"4sd9ubw",title:"Taylor Donations",notes:"",priority:"B",projectId:"misc",addedDate:"2026-05-20",doneDate:null},{id:"ckt5qr8",title:"Equipment",notes:"Identify and source.",priority:"B",projectId:"qp5s6mk",addedDate:"2026-05-20",doneDate:null},{id:"byjmwos",title:"Eliminate unused things",notes:"",priority:"B",projectId:"6kj6i3l",addedDate:"2026-05-20",doneDate:null},{id:"xnsqmtp",title:"Buy reading chair",notes:"",priority:"B",projectId:"6kj6i3l",addedDate:"2026-05-20",doneDate:null},{id:"mmm12fp",title:"Open wall",notes:"",priority:"B",projectId:"6kj6i3l",addedDate:"2026-05-20",doneDate:null},{id:"mhw2npu",title:"Paint",notes:"",priority:"B",projectId:"6kj6i3l",addedDate:"2026-05-20",doneDate:null},{id:"77o3ilk",title:"Spray for spiders",notes:"",priority:"B",projectId:"misc",addedDate:"2026-05-21",doneDate:null},{id:"4gd5oj4",title:"Continue testing & revisions",notes:"",priority:"A",projectId:"8441g26",addedDate:"2026-05-21",doneDate:null,progressLog:[{date:"2026-05-21",note:"Lots of iterations!"},{date:"2026-05-22",note:"More testing and iterations. It's coming along!"},{date:"2026-05-23",note:"Lots!"}],today:true},{id:"urgnsk0",title:"ASH",notes:"",priority:"B",projectId:"misc",addedDate:"2026-05-21",doneDate:null},{id:"zm0fbyt",title:"Install cabinet doorknobs",notes:"",priority:"A",projectId:"misc",addedDate:"2026-05-21",doneDate:null},{id:"igtvyfk",title:"Some form of movement",notes:"",priority:"A",projectId:"misc",addedDate:"2026-05-21",doneDate:"2026-05-23"},{id:"ots3dbd",title:"Varnish the island",notes:"",priority:"B",projectId:"uk4ed2x",waiting:true,waitingOn:"3 days for paint to completely dry.",addedDate:"2026-05-22",doneDate:null,dueDate:"2026-05-26",today:true},{id:"dv2i2vo",title:"Sand and paint base",notes:"",priority:"A",projectId:"uk4ed2x",addedDate:"2026-05-22",doneDate:"2026-05-24"},{id:"w3puxsb",title:"Put on hardware",notes:"",priority:"B",projectId:"uk4ed2x",waiting:true,waitingOn:"Last task, after varnish",addedDate:"2026-05-22",doneDate:null},{id:"smymb3m",title:"Sand and paint drawers",notes:"",priority:"A",projectId:"uk4ed2x",addedDate:"2026-05-22",doneDate:"2026-05-22"},{id:"8kitbws",title:"Novato Library Card",notes:"",priority:"B",projectId:"misc",dueDate:"2026-05-27",addedDate:"2026-05-23",doneDate:null,today:true},{id:"78zrg36",title:"Extract from claude.ai into standalone HTML/JS file",notes:"",priority:"B",projectId:"8441g26",addedDate:"2026-05-23",doneDate:null},{id:"xrjatgk",title:"Sign up at console.anthropic.com for API key",notes:"",priority:"B",projectId:"8441g26",addedDate:"2026-05-23",doneDate:null},{id:"x8wafu9",title:"Add PWA manifest (app name, icon, full screen)",notes:"",priority:"B",projectId:"8441g26",addedDate:"2026-05-23",doneDate:null},{id:"7vunzqk",title:"Host on Netlify or GitHub Pages",notes:"",priority:"B",projectId:"8441g26",addedDate:"2026-05-23",doneDate:null},{id:"utvcr8z",title:"Add to Home Screen on iPhone, iPad, Mac",notes:"",priority:"B",projectId:"8441g26",addedDate:"2026-05-23",doneDate:null},{id:"hggkg2u",title:"Test runs independently in Safari",notes:"",priority:"A",projectId:"8441g26",addedDate:"2026-05-23",doneDate:null},{id:"499t067",title:"Cross-device data sync",notes:"",priority:"B",projectId:"8441g26",addedDate:"2026-05-23",doneDate:null},{id:"477awzu",title:"Look for Claude convo re wine app",notes:"",priority:"A",projectId:"misc",addedDate:"2026-05-23",doneDate:"2026-05-23"},{id:"f765f34",title:"Chyro",notes:"",priority:"A",projectId:"misc",dueDate:"2026-05-27",addedDate:"2026-05-23",doneDate:null,today:true},{id:"nkr646d",title:"Exercise",notes:"",priority:"A",projectId:"misc",addedDate:"2026-05-24",doneDate:null},{id:"boquqo9",title:"Watch Claude Beginner Videos",notes:"There are also Reddit groups.",priority:"A",projectId:"8441g26",addedDate:"2026-05-24",doneDate:null},{id:"2r2ncep",title:"Paint the base cabinet",notes:"",priority:"A",projectId:"uk4ed2x",addedDate:"2026-05-26",doneDate:null},{id:"90lx4ky",title:"Pool",notes:"",priority:"B",projectId:"misc",dueDate:"2026-06-01",recur:"weekly",addedDate:"2026-05-26",doneDate:"2026-05-26"},{id:"ydm4ihs",title:"Pool",notes:"",priority:"B",projectId:"misc",dueDate:"2026-06-02",recur:"weekly",addedDate:"2026-05-26",doneDate:null}],projects:[{id:"misc",name:"Misc Tasks"},{id:"uk4ed2x",name:"Refinish Island"},{id:"8441g26",name:"Mizmo Go!"},{id:"qp5s6mk",name:"Fence"},{id:"6kj6i3l",name:"Office conversion to den"},{"id":"housemnt","name":"House Maintenance","parked":false}],moodWords:["Happy","Calm","Grateful","Accomplished","Energised","Anxious","Frustrated","Tired","Unmotivated","Peaceful"],actWords:["Walked","Stretched","Yoga","Weights","Bike","Swim","Rest Day","Deep Work","Creative","Admin","Social"],coachLogs:{"2026-05-26":[{type:"evening",messages:[{role:"user",content:"Dentist pt in a crown today.  It was like full-on construction in my mouth.  I hate dental work.  It's so invasive.  Pretty much took me down for the day, accomplishments-wise. I tried to work with Claude, but timed out almost immediately.  But I did do my nails — they've healed enough, I think, for my acrylic tips."},{role:"assistant",content:"Oof, a crown prep is no joke — that's genuinely exhausting, both physically and mentally, and it makes complete sense that it took the wind out of your sails for the day. And hey, getting your nails done after that? That's actually a real act of self-care, not nothing. Your mood holding at \"okay\" after mouth construction sounds about right. One gentle thought: your body spent a lot of energy today just getting through something hard — tomorrow's a clean slate with no dental trauma on the schedule."},{role:"user",content:"Yes.  And I'm off to pool league tonight."},{role:"assistant",content:"Good timing — some friendly competition is exactly the right kind of reset after a rough day. Go knock some balls around!"},{role:"user",content:"Not my brother.  I'm on a league — I play 8 ball on Tues and 9 ball on Thurs."},{role:"assistant",content:"Ha, my bad! Pool league sounds like a great way to end the day."}],savedAt:"2026-05-27T00:26:30.908Z",mood:"okay",words:[],phys:"skip"}]}};
+
+
+const _storage = {
+  get: (key) => Promise.resolve(localStorage.getItem(key) ? {value: localStorage.getItem(key)} : null),
+  set: (key, value) => { localStorage.setItem(key, value); return Promise.resolve({key, value}); },
+  delete: (key) => { localStorage.removeItem(key); return Promise.resolve({key, deleted: true}); }
+};
+Object.defineProperty(window, 'storage', { get: () => _storage, configurable: true });
+const STORE_KEYS={mood:"wh_mood_data_v6",act:"wh_act_data_v6",tasks:"wh_tasks_v6",projects:"wh_projects_v6",moodWords:"wh_mood_words_v6",actWords:"wh_act_words_v6",coachLogs:"wh_coach_logs_v6",seeded:"wh_seeded_v6"};
+
+async function storageGet(key,fallback){try{const r=await window.storage.get(key);return r?JSON.parse(r.value):fallback;}catch(e){return fallback;}}
+async function storageSet(key,val){try{await window.storage.set(key,JSON.stringify(val));}catch(e){}}
+
+function getApiKey(){return localStorage.getItem("mizmo_api_key")||"";}
+function setApiKey(key){localStorage.setItem("mizmo_api_key",key);}
+
+const COACH_SYS=`You are a warm, practical wellness coach inside Mizmo Go! Your user is Mizmo — 65, retired, Napa CA. Project-oriented brain; thrives on deadlines; procrastinates mundane tasks. Keep responses conversational, 2-5 sentences. Ask ONE question at a time when exploring procrastination.
+
+Key facts: thyroid med adjustment (fatigue, swollen ankles); sciatica both legs, chiro scheduled, PT stretches; morning trap = sitting with phone; motivated by real external deadlines not fake ones; fence project has hard deadlines; building this app (Mizmo Go!); plays pool league (8-ball Tues, 9-ball Thurs); has a dog.`;
+
+function nextDueDate(recur){
+  const d=new Date();
+  if(!recur)return toDS(d.getFullYear(),d.getMonth(),d.getDate());
+  if(recur.startsWith("custom:")){
+    const[,n,unit]=recur.split(":");
+    if(unit==="manual")return toDS(d.getFullYear(),d.getMonth(),d.getDate()); // user sets manually
+    const num=parseInt(n)||1;
+    if(unit==="days")d.setDate(d.getDate()+num);
+    else if(unit==="weeks")d.setDate(d.getDate()+num*7);
+    else if(unit==="months")d.setMonth(d.getMonth()+num);
+    else if(unit==="years")d.setFullYear(d.getFullYear()+num);
+  } else if(recur==="daily")d.setDate(d.getDate()+1);
+  else if(recur==="weekly")d.setDate(d.getDate()+7);
+  else if(recur==="biweekly")d.setDate(d.getDate()+14);
+  else if(recur==="monthly")d.setMonth(d.getMonth()+1);
+  return toDS(d.getFullYear(),d.getMonth(),d.getDate());
+}
+
+async function askCoach(messages,ctx=""){
+  const sys=COACH_SYS+(ctx?"\n\nUser data:\n"+ctx:"");
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),30000);
+  let res;
+  const apiKey=getApiKey();
+  const headers={"content-type":"application/json","anthropic-version":"2023-06-01"};
+  if(apiKey){headers["x-api-key"]=apiKey;}
+  else{headers["anthropic-dangerous-direct-browser-access"]="true";}
+  try{res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",signal:controller.signal,headers,body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,stream:true,system:sys,messages:messages.slice(-12)})});}
+  catch(e){clearTimeout(timeout);if(e.name==="AbortError")throw new Error("Coach timed out — try again.");throw new Error("Network error: "+e.message);}
+  if(!res.ok){clearTimeout(timeout);if(res.status===429)throw new Error("Rate limit — wait a moment.");if(res.status===401)throw new Error("Session expired — reload.");throw new Error("HTTP "+res.status);}
+  const reader=res.body.getReader();const decoder=new TextDecoder();let fullText="",buffer="";
+  clearTimeout(timeout);const st=setTimeout(()=>{reader.cancel();},25000);
+  try{while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split("\n");buffer=lines.pop();for(const line of lines){if(!line.startsWith("data: "))continue;const j=line.slice(6).trim();if(j==="[DONE]")continue;try{const e=JSON.parse(j);if(e.type==="content_block_delta"&&e.delta?.type==="text_delta")fullText+=e.delta.text;if(e.type==="error")throw new Error(e.error?.message||"stream error");}catch(e){if(e.message&&e.message.includes("stream error"))throw e;}}}}finally{clearTimeout(st);}
+  if(!fullText)throw new Error("No response — try reloading.");
+  // Trim leading punctuation/space that can appear from streaming artifacts
+  return fullText.replace(/^[,\s]+/,"");
+}
+
+async function loadCoachMemory(){try{const r=await window.storage.get("coach_memory");return r?JSON.parse(r.value):{insights:[],lastUpdated:null};}catch(e){return{insights:[],lastUpdated:null};}}
+async function saveCoachMemory(mem){try{await window.storage.set("coach_memory",JSON.stringify(mem));}catch(e){}}
+function extractHashTasks(text){const parts=text.split("#");const tasks=[];for(let i=1;i<parts.length;i++){const t=parts[i].split("\n")[0].trim();if(t)tasks.push(t);}return tasks;}
+
+function Confirm({title,body,onOk,onCancel,okLabel="Delete",okColor=C.pa}){return(<div style={S.overlay} onClick={onCancel}><div style={{...S.modal,maxWidth:340}} onClick={e=>e.stopPropagation()}><div style={{fontFamily:"Georgia,serif",fontSize:"1.05rem",fontWeight:600,marginBottom:10}}>{title}</div><p style={{fontSize:".87rem",color:C.text2,marginBottom:16}}>{body}</p><div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button style={btn("ghost")} onClick={onCancel}>Cancel</button><button style={btn("primary",{background:okColor})} onClick={onOk}>{okLabel}</button></div></div></div>);}
+function FormRow({label,children}){return <div style={{marginBottom:12}}>{label&&<label style={{display:"block",fontSize:".82rem",fontWeight:600,color:C.text2,marginBottom:4}}>{label}</label>}{children}</div>;}
+function MoodOpt({emoji,label,selected,bg,border,color,onClick}){return <div onClick={onClick} style={{flex:1,minWidth:70,padding:"8px 4px",border:`2px solid ${selected?border:C.border}`,borderRadius:8,textAlign:"center",cursor:"pointer",fontSize:".82rem",fontWeight:500,background:selected?bg:"transparent",color:selected?color:C.text2,transition:"all .15s",userSelect:"none"}}>{emoji} {label}</div>;}
+function Chip({label,selected,onClick,dashed}){return <div onClick={onClick} style={{padding:"4px 10px",borderRadius:20,fontSize:".77rem",fontWeight:500,cursor:"pointer",border:`1px ${dashed?"dashed":"solid"} ${selected?C.accent:C.border}`,background:selected?C.accent:C.bg2,color:selected?"#fff":dashed?C.text3:C.text2,transition:"all .12s"}}>{label}</div>;}
+function ChipsEditor({wordList,selected,onChange,onAddWord}){return <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:6}}>{wordList.map(w=><Chip key={w} label={w} selected={selected.includes(w)} onClick={()=>onChange(selected.includes(w)?selected.filter(x=>x!==w):[...selected,w])}/>)}<Chip label="+ Other" dashed onClick={onAddWord}/></div>;}
+
+function MoodCalendar({moodData,tasks,coachLogs,onDayClick}){
+  const [cal,setCal]=useState({y:new Date().getFullYear(),m:new Date().getMonth()});
+  const [search,setSearch]=useState("");const [searchResults,setSearchResults]=useState([]);
+  const doSearch=q=>{setSearch(q);if(!q.trim()){setSearchResults([]);return;}const ql=q.toLowerCase();const results=tasks.filter(t=>t.doneDate&&t.title.toLowerCase().includes(ql)).map(t=>({id:t.id,title:t.title,date:t.completedOn||t.doneDate,doneDate:t.doneDate,trivial:t.trivial})).filter(r=>r.date&&r.date!=="trivial").sort((a,b)=>b.date.localeCompare(a.date));setSearchResults(results);};
+  const jumpTo=dateStr=>{const[y,m]=dateStr.split("-");setCal({y:parseInt(y),m:parseInt(m)-1});setSearch("");setSearchResults([]);onDayClick(dateStr);};
+  const nav=d=>setCal(c=>{let m=c.m+d,y=c.y;if(m<0){m=11;y--;}if(m>11){m=0;y++;}return{y,m};});
+  const firstDay=new Date(cal.y,cal.m,1).getDay();const dim=new Date(cal.y,cal.m+1,0).getDate();const todS=todayDS();
+  let good=0,okay=0,hard=0;
+  for(let d=1;d<=dim;d++){const e=moodData[toDS(cal.y,cal.m,d)];if(e){if(e.mood==="good")good++;else if(e.mood==="okay")okay++;else hard++;}}
+  const mCol={good:{bg:C.mg2,border:C.mg},okay:{bg:C.mo2,border:C.mo},hard:{bg:C.mh2,border:C.mh}};
+  const mEm={good:"😊",okay:"😐",hard:"😔"};
+  return(<div>
+    <div style={{marginBottom:10}}>
+      <input style={{...S.input,fontSize:".84rem"}} value={search} onChange={e=>doSearch(e.target.value)} placeholder="Search completed tasks…"/>
+      {searchResults.length>0&&<div style={{marginTop:6,maxHeight:180,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,background:C.bg}}>
+        {searchResults.map(r=>{const parts=r.date.split("-");const label=`${MONTHS[parseInt(parts[1])-1]} ${parseInt(parts[2])}, ${parts[0]}`;return(<div key={r.id} onClick={()=>jumpTo(r.date)} style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:".84rem",color:C.text}}>{r.trivial&&"🧹 "}{r.title}</span>
+          <span style={{fontSize:".76rem",color:C.text3,flexShrink:0,marginLeft:8}}>{label}</span>
+        </div>);})}
+      </div>}
+      {search&&searchResults.length===0&&<div style={{marginTop:4,fontSize:".78rem",color:C.text3,padding:"4px 2px"}}>No completed tasks found.</div>}
+    </div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+      <button style={S.btnIcon} onClick={()=>nav(-1)}>‹</button>
+      <div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600}}>{MONTHS[cal.m]} {cal.y}</div>
+      <button style={S.btnIcon} onClick={()=>nav(1)}>›</button>
+    </div>
+    <div style={S.calGrid}>
+      {DOWS.map(d=><div key={d} style={{textAlign:"center",fontSize:".7rem",fontWeight:600,color:C.text3,padding:"4px 0",textTransform:"uppercase"}}>{d}</div>)}
+      {Array(firstDay).fill(null).map((_,i)=><div key={"e"+i}/>)}
+      {Array(dim).fill(null).map((_,i)=>{
+        const d=i+1,key=toDS(cal.y,cal.m,d),ent=moodData[key],dot=tasks.filter(t=>t.doneDate===key||t.completedOn===key).length,hasLog=(coachLogs[key]||[]).length>0;
+        const col=ent?mCol[ent.mood]:null;
+        return <div key={d} onClick={()=>onDayClick(key)} style={{borderRadius:6,border:`1px solid ${col?col.border:C.border}`,background:col?col.bg:C.bg2,cursor:"pointer",position:"relative",minHeight:52,transition:"all .15s"}}>
+          <div style={{fontSize:".73rem",padding:"3px 5px",fontWeight:key===todS?700:400,color:key===todS?C.accent:C.text}}>{d}</div>
+          {ent&&<div style={{fontSize:".95rem",padding:"1px 0 0 4px"}}>{mEm[ent.mood]}</div>}
+          {dot>0&&<div style={{position:"absolute",bottom:2,right:3,fontSize:".58rem",color:C.text3,fontWeight:700}}>✓{dot}</div>}
+          {hasLog&&<div style={{position:"absolute",top:2,right:3,fontSize:".65rem"}}>💬</div>}
+        </div>;
+      })}
+    </div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+      {[["😊 Good",good,C.mg2,"#2d6b2d"],["😐 Okay",okay,C.mo2,"#6a5010"],["😔 Hard",hard,C.mh2,"#803028"]].map(([label,count,bg,color])=>(
+        <div key={label} style={{padding:"4px 11px",borderRadius:20,background:bg,color,fontSize:".79rem",fontWeight:500}}>{label}: {count}</div>
+      ))}
+    </div>
+  </div>);
+}
+
+function CoachLogAddon({log,dateKey,onSaveLog,customLabel,setTasks}){
+  const [open,setOpen]=useState(false);const [msgs,setMsgs]=useState(log.messages);const [reply,setReply]=useState("");const [loading,setLoading]=useState(false);const [error,setError]=useState("");const msgsRef=useRef(null);
+  useEffect(()=>{if(msgsRef.current)msgsRef.current.scrollTop=msgsRef.current.scrollHeight;},[msgs,loading]);
+  const send=async()=>{
+    const text=reply.trim();if(!text||loading)return;setReply("");setLoading(true);setError("");
+    const hashTasks=extractHashTasks(text);
+    if(hashTasks.length&&setTasks)setTasks(prev=>[...prev,...hashTasks.map(title=>({id:uid(),title,priority:"A",projectId:"misc",addedDate:todayDS(),doneDate:null,today:true}))]);
+    const userMsg={role:"user",content:text};const updated=[...msgs,userMsg];setMsgs(updated);
+    try{const r=await askCoach(updated);const final=[...updated,{role:"assistant",content:r}];setMsgs(final);if(onSaveLog)onSaveLog(dateKey,log.type,final);}
+    catch(e){setError(e.message);setMsgs(m=>[...m,{role:"assistant",content:"Sorry, trouble responding. Try again."}]);}
+    setLoading(false);
+  };
+  const typeLabel=customLabel!=null?customLabel:{morning:"🌅 Morning",midday:"☀️ Midday",evening:"🌆 Evening",chat:"💬 Chat"}[log.type]||log.type;
+  return(<details style={{marginBottom:8,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}} open={open} onToggle={e=>setOpen(e.target.open)}>
+    <summary style={{padding:"6px 10px",cursor:"pointer",fontSize:".82rem",fontWeight:600,background:C.bg2,userSelect:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <span>{typeLabel}</span><span style={{fontSize:".8rem",color:C.text3}}>{open?"▴":"▾"}</span>
+    </summary>
+    <div style={{padding:"8px 14px 8px 14px",background:C.bg}}>
+      <div ref={msgsRef} style={{display:"flex",flexDirection:"column",gap:6,marginBottom:8,maxHeight:220,overflowY:"auto",padding:"2px 4px 2px 8px"}}>
+        {msgs.filter(m=>m.content!=="__pending__").map((m,mi)=>(
+          <div key={mi} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",width:"100%"}}><div style={{maxWidth:"88%",padding:"6px 10px",fontSize:".8rem",lineHeight:1.5,wordBreak:"break-word",borderRadius:m.role==="user"?"8px 8px 2px 8px":"8px 8px 8px 2px",background:m.role==="user"?C.accent:C.card,color:m.role==="user"?"#fff":C.text,border:m.role==="user"?"none":`1px solid ${C.border}`,whiteSpace:"pre-wrap"}}>{m.content}</div></div>
+        ))}
+        {loading&&<div style={{alignSelf:"flex-start",padding:"6px 10px",borderRadius:"8px 8px 8px 2px",background:C.card,border:`1px solid ${C.border}`,fontSize:".8rem",color:C.text3,fontStyle:"italic"}}>Thinking…</div>}
+      </div>
+      {error&&<div style={{fontSize:".75rem",color:C.pa,marginBottom:6}}>⚠️ {error}</div>}
+      <div style={{display:"flex",gap:6}}>
+        <textarea style={{...S.input,flex:1,fontSize:".82rem",minHeight:40,maxHeight:100,resize:"none",lineHeight:1.4}} value={reply} onChange={e=>setReply(e.target.value)} placeholder="Continue…" rows={2}/>
+        <button style={btn("primary",{fontSize:".8rem",padding:"6px 12px"})} onClick={send} disabled={!reply.trim()||loading}>{loading?"…":"Send"}</button>
+      </div>
+    </div>
+  </details>);
+}
+
+function MoodModal({dateKey,moodData,moodWords,tasks,coachLogs,onSave,onClose,onAddWord,onSaveLog,setTasks,onReopenTask}){
+  const ent=moodData[dateKey]||{};const [mood,setMood]=useState(ent.mood||"");const [words,setWords]=useState(ent.words||[]);const [notes,setNotes]=useState(ent.notes||"");
+  const parts=dateKey.split("-");const label=`${MONTHS[parseInt(parts[1])-1]} ${parseInt(parts[2])}, ${parts[0]}`;
+  const completed=tasks.filter(t=>t.doneDate===dateKey||(t.doneDate==="trivial"&&t.completedOn===dateKey));
+  const opts=[{em:"😊",lb:"Good",v:"good",bg:C.mg2,border:C.mg,color:"#2d6b2d"},{em:"😐",lb:"Okay",v:"okay",bg:C.mo2,border:C.mo,color:"#6a5010"},{em:"😔",lb:"Hard",v:"hard",bg:C.mh2,border:C.mh,color:"#803028"}];
+  return(<div style={S.overlay} onClick={onClose}><div style={S.modal} onClick={e=>e.stopPropagation()}>
+    <div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:16}}>Mood — {label}</div>
+    <FormRow label="How did today feel?"><div style={{display:"flex",gap:8}}>{opts.map(o=><MoodOpt key={o.v} emoji={o.em} label={o.lb} selected={mood===o.v} bg={o.bg} border={o.border} color={o.color} onClick={()=>setMood(o.v)}/>)}</div></FormRow>
+    <FormRow label="Words that fit"><ChipsEditor wordList={moodWords} selected={words} onChange={setWords} onAddWord={()=>onAddWord("mood",words,setWords)}/></FormRow>
+    <FormRow label="Notes"><textarea style={S.textarea} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Anything on your mind…"/></FormRow>
+    {completed.length>0&&<div style={{marginTop:8}}><span style={S.secLbl}>Completed this day</span><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{completed.map(t=><span key={t.id} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",background:C.bg2,borderRadius:10,fontSize:".74rem",border:`1px solid ${C.border}`,color:C.text2}}>✓ {t.title}<button onClick={()=>onReopenTask&&onReopenTask(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:".8rem",padding:0}}>↩</button></span>)}</div></div>}
+    {(coachLogs[dateKey]||[]).length>0&&<div style={{marginTop:12}}><span style={S.secLbl}>💬 Coach Conversations</span>{(coachLogs[dateKey]||[]).map((log,li)=><CoachLogAddon key={li} log={log} dateKey={dateKey} onSaveLog={onSaveLog} setTasks={setTasks}/>)}</div>}
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:16,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+      <button style={btn("ghost")} onClick={onClose}>Cancel</button>
+      <button style={btn("primary")} onClick={()=>{if(!mood){alert("Please choose how today felt.");return;}onSave(dateKey,{mood,words,notes});}}>Save</button>
+    </div>
+  </div></div>);
+}
+
+function WordModal({onSave,onClose}){const [val,setVal]=useState("");return(<div style={S.overlay} onClick={onClose}><div style={{...S.modal,maxWidth:320}} onClick={e=>e.stopPropagation()}><div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:14}}>Add a Word</div><input style={S.input} value={val} onChange={e=>setVal(e.target.value)} placeholder="e.g. Grateful, Restless…" maxLength={30} autoFocus onKeyDown={e=>e.key==="Enter"&&val.trim()&&onSave(val.trim())}/><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}><button style={btn("ghost")} onClick={onClose}>Cancel</button><button style={btn("primary")} onClick={()=>val.trim()&&onSave(val.trim())}>Add</button></div></div></div>);}
+
+function TaskModal({task,projects,defaultProjectId,onSave,onClose,onRemoveToday,onDelete}){
+  const [title,setTitle]=useState(task?.title||"");const [notes,setNotes]=useState(task?.notes||"");const [pri,setPri]=useState(task?.priority||"B");const [projId,setProjId]=useState(task?.projectId||defaultProjectId||"misc");
+  const [waiting,setWaiting]=useState(!!task?.waiting);const [waitingOn,setWaitingOn]=useState(task?.waitingOn||"");
+  const [inProgress,setInProgress]=useState(!!task?.inProgress);const [trivial,setTrivial]=useState(!!task?.trivial);const [markComplete,setMarkComplete]=useState(false);const [completeNote,setCompleteNote]=useState("");const [progressNote,setProgressNote]=useState("");const [dueDate,setDueDate]=useState(task?.dueDate||"");const [recur,setRecur]=useState(task?.recur||"");const progressLog=task?.progressLog||[];
+  return(<div style={S.overlay} onClick={onClose}><div style={S.modal} onClick={e=>e.stopPropagation()}>
+    <div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:16}}>{task?"Edit Task":"Add Task"}</div>
+    <FormRow label="Task Title *"><input style={S.input} value={title} onChange={e=>setTitle(e.target.value)} placeholder="What needs to be done?" autoFocus/></FormRow>
+    <FormRow label="Project"><select style={S.select} value={projId} onChange={e=>setProjId(e.target.value)}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></FormRow>
+    <FormRow label="Priority"><select style={S.select} value={pri} onChange={e=>setPri(e.target.value)}><option value="A">A – Available</option><option value="B">B – Soon</option><option value="C">C – Someday</option></select></FormRow>
+    <FormRow label="Status">
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!waiting} onChange={e=>{setWaiting(e.target.checked);if(e.target.checked)setInProgress(false);}} style={{width:16,height:16}}/><span>⏳ Waiting</span></label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!inProgress} onChange={e=>{setInProgress(e.target.checked);if(e.target.checked)setWaiting(false);}} style={{width:16,height:16}}/><span>🔄 In Progress</span></label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!trivial} onChange={e=>setTrivial(e.target.checked)} style={{width:16,height:16}}/><span title="Complete silently">🧹 Trivial</span></label>
+        {task&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={markComplete} onChange={e=>{setMarkComplete(e.target.checked);if(e.target.checked){setInProgress(false);setWaiting(false);}}} style={{width:16,height:16}}/><span>✅ Complete</span></label>}
+      </div>
+      {waiting&&<input style={{...S.input,marginTop:6,fontSize:".84rem"}} value={waitingOn} onChange={e=>setWaitingOn(e.target.value)} placeholder="Who or what are you waiting on? (required)"/>}
+      {inProgress&&<textarea style={{...S.textarea,marginTop:6,fontSize:".84rem"}} value={progressNote} onChange={e=>setProgressNote(e.target.value)} placeholder={`What did you do today? (${todayDS()})`}/>}
+      {markComplete&&<textarea style={{...S.textarea,marginTop:6,fontSize:".84rem"}} value={completeNote} onChange={e=>setCompleteNote(e.target.value)} placeholder="Completion notes (optional)…"/>}
+    </FormRow>
+    <FormRow label="Due Date">
+      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <input type="date" style={{...S.input,flex:"0 0 auto",width:140,fontSize:".84rem",padding:"6px 8px"}} value={dueDate} onChange={e=>setDueDate(e.target.value)}/>
+{recur===""?<select style={{...S.select,flex:1,fontSize:".84rem",padding:"6px 8px"}} value={recur} onChange={e=>setRecur(e.target.value)}><option value="">No repeat</option><option value="custom:1:days">Every…</option><option value="custom:0:manual">Manual date</option></select>:<div style={{display:"flex",gap:4,flex:1,alignItems:"center"}}><button onClick={()=>setRecur("")} style={{padding:"4px 8px",fontSize:".8rem",background:"none",border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",color:C.text3}}>✕</button><input type="number" min="1" max="999" style={{...S.input,width:60,fontSize:".84rem",padding:"6px 8px"}} value={recur.split(":")[1]||""} onFocus={e=>e.target.select()} onChange={e=>{const parts=recur.split(":");setRecur(`custom:${e.target.value}:${parts[2]||"days"}`);}} placeholder="1"/><select style={{...S.select,flex:1,fontSize:".84rem",padding:"6px 8px"}} value={recur.split(":")[2]||"days"} onChange={e=>{const parts=recur.split(":");setRecur(`custom:${parts[1]||1}:${e.target.value}`)}}><option value="days">days</option><option value="weeks">weeks</option><option value="months">months</option><option value="years">years</option><option value="manual">manual date</option></select></div>}
+      </div>
+    </FormRow>
+    <FormRow label="Notes"><textarea style={S.textarea} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Details, context, links…"/></FormRow>
+    {progressLog.length>0&&<FormRow label="Progress Log"><div style={{maxHeight:120,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>{[...progressLog].reverse().map((entry,i)=><div key={i} style={{fontSize:".78rem",padding:"4px 8px",background:C.bg2,borderRadius:6,border:`1px solid ${C.border}`}}><span style={{color:C.text3,fontWeight:600}}>{entry.date}: </span><span style={{color:C.text2}}>{entry.note}</span></div>)}</div></FormRow>}
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:16,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+      <button style={btn("ghost")} onClick={onClose}>Cancel</button>
+      {task&&onDelete&&<button style={btn("ghost",{color:C.text3})} onClick={()=>onDelete(task.id)}>🗑 Delete</button>}
+      {task?.inProgress&&task?.today&&onRemoveToday&&<button style={btn("ghost",{color:C.text3})} onClick={()=>onRemoveToday(task.id)}>↩ Return to Project</button>}
+      <button style={btn("primary")} onClick={()=>{
+        if(!title.trim()){alert("Title required.");return;}
+        if(waiting&&!waitingOn.trim()){alert("Please describe who or what you're waiting on.");return;}
+        const newLog=[...(progressNote.trim()?[...progressLog,{date:todayDS(),note:progressNote.trim()}]:progressLog),...(completeNote.trim()?[{date:todayDS(),note:"[Complete] "+completeNote.trim()}]:[])];
+        const doneVal=markComplete?(trivial?"trivial":todayDS()):undefined;
+        onSave({title:title.trim(),notes:notes.trim(),priority:pri,projectId:projId,waiting:markComplete?undefined:waiting||undefined,waitingOn:markComplete?undefined:waitingOn.trim()||undefined,inProgress:markComplete?undefined:inProgress||undefined,trivial:trivial||undefined,progressLog:newLog.length?newLog:undefined,dueDate:dueDate||undefined,recur:recur||undefined,doneDate:doneVal,completedOn:markComplete?todayDS():undefined});
+      }}>Save Task</button>
+    </div>
+  </div></div>);
+}
+
+function ProjectModal({onSave,onClose}){const [name,setName]=useState("");return(<div style={S.overlay} onClick={onClose}><div style={{...S.modal,maxWidth:340}} onClick={e=>e.stopPropagation()}><div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:14}}>New Project</div><input style={S.input} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Home, Health, Book Club…" autoFocus onKeyDown={e=>e.key==="Enter"&&name.trim()&&onSave(name.trim())}/><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}><button style={btn("ghost")} onClick={onClose}>Cancel</button><button style={btn("primary")} onClick={()=>name.trim()&&onSave(name.trim())}>Create</button></div></div></div>);}
+
+
+
+function TaskRow({task,onComplete,onEdit,dragHandleProps,onSnooze,isParked}){
+  const [hov,setHov]=useState(false);
+  const isWaiting=!!task.waiting;
+  // stale check moved inline
+  return(<div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"3px 4px",borderRadius:6,background:hov?C.bg2:"transparent",transition:"background .12s",opacity:isWaiting?.7:1}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+    {dragHandleProps&&<div {...dragHandleProps} style={{cursor:"grab",color:C.text3,fontSize:".85rem",paddingTop:1,flexShrink:0,userSelect:"none"}} title="Drag to reorder">⠿</div>}
+    <div onClick={()=>onComplete(task.id)} style={{width:16,height:16,border:`2px solid ${C.border}`,borderRadius:4,cursor:"pointer",flexShrink:0,marginTop:2}}/>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        <span style={{fontSize:".87rem",lineHeight:1.35,color:isWaiting?C.text3:C.text,cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:3}} onClick={()=>onEdit&&onEdit(task)}>{task.title}</span>
+        {isWaiting&&<span style={{fontSize:".8rem"}}>⏳</span>}
+        {task.inProgress&&!isWaiting&&<span style={{fontSize:".8rem"}}>🔄</span>}
+        {task.trivial&&<span style={{fontSize:".8rem"}} title="Trivial">🧹</span>}
+        {isStale(task)&&!isParked&&<span onClick={e=>{e.stopPropagation();onSnooze&&onSnooze(task.id);}} style={{fontSize:".75rem",cursor:"pointer",userSelect:"none"}} title="Snooze for 10 days">💤</span>}
+        {task.dueDate&&<DueBadge dueDate={task.dueDate}/>}
+      </div>
+      {task.notes&&!task.waitingOn&&!task.inProgress&&<div style={{fontSize:".77rem",color:C.text3,marginTop:1}}>{task.notes}</div>}
+    </div>
+  </div>);
+}
+
+function ProgressPromptModal({task,onLog,onClose}){const [note,setNote]=useState("");return(<div style={S.overlay} onClick={onClose}><div style={{...S.modal,maxWidth:360}} onClick={e=>e.stopPropagation()}><div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:6}}>🔄 {task.title}</div><div style={{fontSize:".85rem",color:C.text2,marginBottom:14}}>Log today's progress.</div><textarea style={{...S.textarea,minHeight:80}} value={note} onChange={e=>setNote(e.target.value)} placeholder="What did you get done today?" autoFocus/><div style={{display:"flex",justifyContent:"space-between",gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}><button style={btn("ghost")} onClick={onClose}>Cancel</button><div style={{display:"flex",gap:8}}><button style={btn("ghost")} onClick={()=>onLog(task.id,note,false)} disabled={!note.trim()}>Save & Keep Open</button><button style={btn("primary")} onClick={()=>onLog(task.id,note,true)}>Save & Complete</button></div></div></div></div>);}
+
+function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday}){
+  const [hov,setHov]=useState(false);const proj=projects.find(p=>p.id===task.projectId);const priCol={A:{bg:"#fde8e7",color:C.pa},B:{bg:"#fef3e2",color:C.pb},C:{bg:"#e8f4e6",color:C.pc}};const pc=priCol[task.priority]||priCol.A;
+  return(<div style={{display:"flex",alignItems:"flex-start",gap:14,padding:"5px 4px",borderRadius:6,background:hov?C.bg2:"transparent",transition:"background .12s"}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+    <div onClick={()=>onComplete(task.id)} style={{width:18,height:18,border:`2px solid ${task.waiting?"#9b7bcc":C.accent}`,borderRadius:4,cursor:"pointer",flexShrink:0,marginTop:1,background:task.progressedOn===todayDS()?C.accent+"44":"transparent"}}/>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+        <span style={{fontSize:".83rem",lineHeight:1.3,cursor:"pointer",textDecoration:(task.doneDate||task.progressedOn===todayDS())?"line-through":"underline dotted",textUnderlineOffset:3,color:(task.doneDate||task.progressedOn===todayDS())?C.text3:C.text,opacity:(task.doneDate||task.progressedOn===todayDS())?.7:1}} onClick={()=>onEdit(task)}>{task.title}</span>
+        {task.priority!=="A"&&<span style={{padding:"1px 5px",fontSize:".66rem",fontWeight:700,background:pc.bg,color:pc.color,borderRadius:4}}>{task.priority}</span>}
+        {task.inProgress&&!task.waiting&&<span style={{fontSize:".78rem"}}>🔄</span>}
+        {task.waiting&&<span style={{fontSize:".78rem"}}>⏳</span>}
+        {proj&&proj.id!=="misc"&&<span style={{padding:"1px 6px",fontSize:".66rem",background:C.bg2,color:C.text3,borderRadius:4,border:`1px solid ${C.border}`}}>{proj.name}</span>}
+        {task.dueDate&&<DueBadge dueDate={task.dueDate}/>}
+      </div>
+      {task.notes&&<div style={{fontSize:".77rem",color:C.text3,marginTop:1}}>{task.notes}</div>}
+    </div>
+    {!task.doneDate&&<div style={{display:"flex",gap:2,flexShrink:0}}>
+      <button style={{...S.btnIcon,width:28,height:28,fontSize:".7rem",color:C.text3,fontWeight:700}} onClick={()=>onRemoveToday(task.id)} title="Remove from Today">↩</button>
+      <button style={{...S.btnIcon,width:28,height:28}} onClick={()=>onDelete(task.id)}>🗑</button>
+    </div>}
+  </div>);
+}
+
+function TodoTab({tasks,projects,setTasks,setProjects}){
+  const [showTask,setShowTask]=useState(false);const [editTask,setEditTask]=useState(null);const [showProj,setShowProj]=useState(false);const [collapsed,setCollapsed]=useState({});const [confirm,setConfirm]=useState(null);const [addingTo,setAddingTo]=useState(null);const [addingToToday,setAddingToToday]=useState(false);const [progressPrompt,setProgressPrompt]=useState(null);
+  const active=tasks.filter(t=>!t.doneDate);
+  const _todayActive=active.filter(t=>t.today).filter(t=>t.progressedOn!==todayDS());
+  const _todayProgressed=active.filter(t=>t.today&&t.progressedOn===todayDS());
+  const _todayDone=tasks.filter(t=>t.completedOn===todayDS()&&t.doneDate);
+  const todayTasks=[..._todayActive,..._todayProgressed,..._todayDone];
+  const saveTask=data=>{const isToday=addingToToday;const updated=editTask?tasks.map(t=>t.id===editTask.id?{...t,...data}:t):[...tasks,{id:uid(),...data,addedDate:todayDS(),doneDate:data.doneDate||null,today:isToday?true:undefined}];setTasks(updated);setShowTask(false);setEditTask(null);setAddingTo(null);setAddingToToday(false);};
+  const completeTask=id=>{const task=tasks.find(t=>t.id===id);if(task?.inProgress){setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:todayDS(),completedOn:todayDS(),today:true}:x));}else{setTasks(prev=>{const updated=prev.map(x=>x.id===id?{...x,doneDate:task?.trivial?"trivial":todayDS(),completedOn:todayDS(),today:task?.trivial?x.today:undefined}:x);if(task?.recur){const next={...task,id:uid(),doneDate:null,today:undefined,completedOn:undefined,addedDate:todayDS(),dueDate:nextDueDate(task.recur)};return[...updated,next];}return updated;});}};
+  const handleProgressLog=(id,note,complete)=>{setTasks(tasks.map(x=>{if(x.id!==id)return x;const newLog=[...(x.progressLog||[]),{date:todayDS(),note:note.trim()}];if(complete)return{...x,doneDate:todayDS(),completedOn:todayDS(),inProgress:undefined,progressLog:newLog};return{...x,progressLog:newLog};}));setProgressPrompt(null);};
+  const removeFromToday=id=>{const task=tasks.find(t=>t.id===id);if(task?.recur){setTasks(prev=>prev.map(x=>x.id===id?{...x,today:undefined,dueDate:tomorrowDS()}:x));}else{setTasks(prev=>prev.map(x=>x.id===id?{...x,today:undefined}:x));}};
+  const addToToday=id=>setTasks(tasks.map(x=>x.id===id?{...x,today:true,onDeck:undefined}:x));
+  const reorderWaiting=(newArr)=>{
+    setTasks(prev=>{
+      const ids=new Set(newArr.map(t=>t.id));
+      const others=prev.filter(t=>!ids.has(t.id));
+      return[...others,...newArr];
+    });
+  };
+  const reorderRecur=(newArr)=>{
+    setTasks(prev=>{
+      const ids=new Set(newArr.map(t=>t.id));
+      const others=prev.filter(t=>!ids.has(t.id));
+      const firstIdx=prev.findIndex(t=>t.recur&&!t.doneDate);
+      if(firstIdx===-1)return[...others,...newArr];
+      const before=prev.slice(0,firstIdx).filter(t=>!ids.has(t.id));
+      const after=prev.slice(firstIdx).filter(t=>!ids.has(t.id));
+      return[...before,...newArr,...after];
+    });
+  };
+  const reorderToday=(newArr)=>{
+    setTasks(prev=>{
+      const ids=new Set(newArr.map(t=>t.id));
+      const others=prev.filter(t=>!ids.has(t.id));
+      return[...newArr,...others];
+    });
+  };
+  const doDelete=()=>{if(!confirm)return;if(confirm.type==="task")setTasks(tasks.filter(t=>t.id!==confirm.id));else{setProjects(projects.filter(p=>p.id!==confirm.id));setTasks(tasks.filter(t=>t.projectId!==confirm.id));}setConfirm(null);};
+  const addProject=name=>{setProjects([...projects,{id:uid(),name}]);setShowProj(false);};
+  const moveProject=(idx,dir)=>{const next=idx+dir;if(next<0||next>=projects.length)return;const arr=[...projects];[arr[idx],arr[next]]=[arr[next],arr[idx]];setProjects(arr);};
+  const priLabel={A:"A – Available",B:"B – Soon",C:"C – Someday"};const priCol={A:{bg:"#fde8e7",color:C.pa},B:{bg:"#fef3e2",color:C.pb},C:{bg:"#e8f4e6",color:C.pc}};
+  const dragRef=useRef({idx:null,projId:null,pri:null});
+  const todayDragRef=useRef({idx:null});
+  const recurDragRef=useRef({idx:null});
+  const waitDragRef=useRef({idx:null});
+  const reorderTasks=(projId,pri,newArr)=>{
+    setTasks(prev=>{
+      const ids=new Set(newArr.map(t=>t.id));
+      const others=prev.filter(t=>!ids.has(t.id));
+      const firstIdx=prev.findIndex(t=>t.projectId===projId&&t.priority===pri&&!t.recur&&!t.doneDate);
+      if(firstIdx===-1)return[...others,...newArr];
+      const before=prev.slice(0,firstIdx).filter(t=>!ids.has(t.id));
+      const after=prev.slice(firstIdx).filter(t=>!ids.has(t.id));
+      return[...before,...newArr,...after];
+    });
+  };
+  return(<div>
+    <div style={{background:`linear-gradient(135deg,${C.td2},${C.bg2})`,border:`1.5px solid #D4A820`,borderRadius:14,marginBottom:18,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 14px"}}>
+        <span style={{fontSize:"1.1rem"}}>🌅</span><span style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:"1rem",flex:1}}>Today</span>
+        <span style={{fontSize:".75rem",color:C.text3}}>{todayTasks.length} task{todayTasks.length!==1?"s":""}</span>
+        <button style={{...S.btnIcon,background:C.accent,borderColor:C.accent,color:"#fff",fontSize:".72rem",fontWeight:600,width:"auto",padding:"0 8px",height:26,marginLeft:4}} onClick={()=>{setEditTask(null);setAddingTo("misc");setAddingToToday(true);setShowTask(true);}}>+ Add</button>
+      </div>
+      <div style={{padding:"2px 8px 8px"}}>
+        {todayTasks.length===0?<div style={{color:C.text3,fontSize:".83rem",padding:"4px 2px",fontStyle:"italic"}}>Nothing committed yet — pull tasks from projects below or add one directly.</div>
+        :todayTasks.map((task,ti)=>(
+          <div key={task.id} draggable
+            onDragStart={()=>{todayDragRef.current={idx:ti};}}
+            onDragOver={e=>{e.preventDefault();const r=todayDragRef.current;if(r.idx===null||r.idx===ti)return;const arr=[...todayTasks];const[m]=arr.splice(r.idx,1);arr.splice(ti,0,m);todayDragRef.current.idx=ti;reorderToday(arr);}}
+            onDragEnd={()=>{todayDragRef.current={idx:null};}}
+            style={{cursor:"grab"}}>
+            <TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday}/>
+          </div>
+        ))}
+      </div>
+    </div>
+    {(()=>{
+      const onDeckTasks=active.filter(t=>{
+        if(t.today||t.waiting||t.doneDate||t.recur)return false;
+        const proj=projects.find(p=>p.id===t.projectId);
+        if(proj?.parked)return false;
+        if(t.onDeck)return true;
+        if(t.priority!=="A")return false;
+        if(t.projectId==="misc")return true;
+        const projATasks=active.filter(x=>x.projectId===t.projectId&&x.priority==="A"&&!x.today&&!x.waiting);
+        return projATasks[0]?.id===t.id;
+      });
+      return onDeckTasks.length>0&&(
+      <div style={{background:C.card,border:`1.5px solid ${C.pa}22`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:"#fde8e7"}}>
+          <span style={{fontWeight:700,fontSize:".8rem",color:C.pa}}>A</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:C.pa}}>On Deck</span>
+        </div>
+        <div style={{padding:"4px 10px 8px"}}>
+          {(()=>{
+            const today=todayDS();
+            const tenDays=new Date();tenDays.setDate(tenDays.getDate()+10);
+            const tenDayStr=toDS(tenDays.getFullYear(),tenDays.getMonth(),tenDays.getDate());
+            const upcoming=onDeckTasks.filter(t=>t.dueDate&&t.dueDate>=today&&t.dueDate<=tenDayStr);
+            if(!upcoming.length)return null;
+            return(<div style={{marginBottom:8}}>
+              <div style={{fontSize:".72rem",fontWeight:700,color:"#8a5c00",background:"#fef3c7",border:"1px solid #d4a820",borderRadius:8,padding:"2px 10px",marginBottom:4,display:"inline-block"}}>📅 Coming Up</div>
+              {upcoming.map(task=>(
+                <div key={task.id} style={{display:"flex",alignItems:"flex-start",gap:4}}>
+                  <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0,marginTop:3}}>
+                    <button onClick={()=>addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:"#B8941F",border:"1px solid #B8941F",borderRadius:8,background:"#FEF3C7",cursor:"pointer"}}>+ Today</button>
+                  </div>
+                </div>
+              ))}
+            </div>);
+          })()}
+          {onDeckTasks.filter(t=>!(t.dueDate&&(()=>{const td=new Date();td.setDate(td.getDate()+10);return t.dueDate>=todayDS()&&t.dueDate<=toDS(td.getFullYear(),td.getMonth(),td.getDate());})())).map(task=>(
+            <div key={task.id} style={{display:"flex",alignItems:"flex-start",gap:4}}>
+              <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
+              <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0,marginTop:3}}>
+                <button onClick={()=>addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:"#B8941F",border:`1px solid #B8941F`,borderRadius:8,background:C.td2,cursor:"pointer"}}>+ Today</button>
+                {task.onDeck&&<button onClick={()=>setTasks(prev=>prev.map(x=>x.id===task.id?{...x,onDeck:undefined}:x))} style={{padding:"2px 8px",fontSize:".7rem",color:C.text3,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer"}}>− Deck</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>);
+    })()}
+    {(()=>{const recurTasks=active.filter(t=>t.recur);if(!recurTasks.length)return null;const isOpen=!collapsed.__recur__;return(<div style={{background:C.card,border:`1px solid #c8d8b8`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#e8f0e0",cursor:"pointer",userSelect:"none"}} onClick={()=>setCollapsed(c=>({...c,__recur__:!c.__recur__}))}>
+        <span>🔁</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:"#2a4a28"}}>Recurring</span>
+        <span style={{fontSize:".75rem",color:"#4a6a48"}}>{recurTasks.length} task{recurTasks.length!==1?"s":""}</span>
+        <span style={{color:"#4a6a48",transform:isOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span>
+      </div>
+      {isOpen&&<div style={{padding:"4px 10px 8px"}}>
+        {recurTasks.map((task,ti)=>{
+          const proj=projects.find(p=>p.id===task.projectId);
+          const pc=priCol[task.priority]||priCol.B;
+          const recurLabel=(r=>{
+            if(!r)return"";
+            if(r.startsWith("custom:")){
+              const[,n,unit]=r.split(":");
+              if(unit==="manual")return"Manual date";
+              return`Every ${n} ${unit}`;
+            }
+            return{daily:"Daily",weekly:"Weekly",biweekly:"Every 2 wks",monthly:"Monthly"}[r]||r;
+          })(task.recur);
+          return(<div key={task.id} draggable
+            onDragStart={()=>{recurDragRef.current={idx:ti};}}
+            onDragOver={e=>{e.preventDefault();const r=recurDragRef.current;if(r.idx===null||r.idx===ti)return;const arr=[...recurTasks];const[m]=arr.splice(r.idx,1);arr.splice(ti,0,m);recurDragRef.current.idx=ti;reorderRecur(arr);}}
+            onDragEnd={()=>{recurDragRef.current={idx:null};}}
+            style={{display:"flex",alignItems:"center",gap:4,padding:"4px 2px",borderBottom:`1px solid ${C.border}`,cursor:"grab"}}>
+            <div onClick={()=>completeTask(task.id)} style={{width:16,height:16,border:`2px solid ${C.border}`,borderRadius:4,cursor:"pointer",flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                <span style={{fontSize:".83rem",cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:3}} onClick={()=>{setEditTask(task);setShowTask(true);}}>{task.title}</span>
+                <span style={{padding:"1px 5px",fontSize:".66rem",fontWeight:700,background:pc.bg,color:pc.color,borderRadius:4}}>{task.priority}</span>
+                {task.trivial&&<span style={{fontSize:".75rem"}} title="Trivial">🧹</span>}
+                <span style={{fontSize:".68rem",color:"#4a6a48",background:"#e8f0e0",borderRadius:10,padding:"1px 6px"}}>{recurLabel}</span>
+                {proj&&proj.id!=="misc"&&<span style={{fontSize:".66rem",color:C.text3,background:C.bg2,borderRadius:4,padding:"1px 6px",border:`1px solid ${C.border}`}}>{proj.name}</span>}
+                {task.dueDate&&<DueBadge dueDate={task.dueDate}/>}
+              </div>
+            </div>
+            {task.today?<span style={{flexShrink:0,padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:"#B8941F",border:`1px solid #B8941F`,borderRadius:8,background:C.td2}}>In Today</span>:<button onClick={()=>addToToday(task.id)} style={{flexShrink:0,padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:C.text3,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer"}}>+ Today</button>}
+            <button style={{...S.btnIcon,width:24,height:24,fontSize:".7rem",color:C.text3}} onClick={()=>setConfirm({type:"task",id:task.id,name:task.title})}>🗑</button>
+          </div>);
+        })}
+      </div>}
+    </div>);})()}
+    <div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600,marginBottom:10,color:C.text2}}>Projects</div>
+    {[...[...projects].filter(p=>!p.completed).sort((a,b)=>0),...(active.filter(t=>t.waiting).length>0?[{id:"__waiting__",name:"Waiting"}]:[])].map((proj,idx)=>{
+      if(proj.id==="__waiting__"){
+        const wt=active.filter(t=>t.waiting);
+        return(<div key="__waiting__" style={{background:C.card,border:`1px solid #b8c8e0`,borderRadius:12,marginBottom:12,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#e8f0f8",cursor:"pointer"}} onClick={()=>setCollapsed(c=>({...c,__waiting__:!c.__waiting__}))}>
+            <span>⏳</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:"#2a4a68"}}>Waiting</span>
+            <span style={{fontSize:".7rem",color:"#4a6a88",fontStyle:"italic",marginRight:6}}>external only</span>
+            <span style={{fontSize:".75rem",color:"#4a6a88"}}>{wt.length} blocked</span><span style={{color:"#9b7bcc",marginLeft:4}}>▾</span>
+          </div>
+          {!collapsed.__waiting__&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
+            <tbody>{wt.map((task,wi)=>{const p=projects.find(x=>x.id===task.projectId);return <tr key={task.id} draggable
+                onDragStart={()=>{waitDragRef.current={idx:wi};}}
+                onDragOver={e=>{e.preventDefault();const r=waitDragRef.current;if(r.idx===null||r.idx===wi)return;const arr=[...wt];const[m]=arr.splice(r.idx,1);arr.splice(wi,0,m);waitDragRef.current.idx=wi;reorderWaiting(arr);}}
+                onDragEnd={()=>{waitDragRef.current={idx:null};}}
+                style={{cursor:"grab"}}><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`}}><span style={{cursor:"pointer",textDecoration:"underline dotted"}} onClick={()=>{setEditTask(task);setShowTask(true);}}>⏳ {task.title}</span>{task.waitingOn&&<div style={{fontSize:".72rem",color:"#4a6a88",marginTop:1}}>↳ {task.waitingOn}</div>}</td><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`,color:"#4a6a88",fontSize:".78rem"}}>{p?.name||"Misc"}</td></tr>;})}</tbody>
+          </table>}
+        </div>);
+      }
+      const pt=active.filter(t=>t.projectId===proj.id);const isOpen=!collapsed[proj.id];
+      const arrowBtn=(label,disabled,onClick)=>(<button onClick={e=>{e.stopPropagation();onClick();}} disabled={disabled} style={{...S.btnIcon,marginLeft:1,fontSize:".7rem",opacity:disabled?.3:1,cursor:disabled?"default":"pointer"}}>{label}</button>);
+      return(<div key={proj.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,marginBottom:12,overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:proj.completed?"#e8f4e6":C.bg2,userSelect:"none"}}>
+          <span style={{cursor:"pointer",fontSize:"1rem"}} onClick={e=>{e.stopPropagation();setProjects(projects.map(p=>{if(p.id!==proj.id)return p;if(!p.parked&&!p.completed)return{...p,parked:true};if(p.parked)return{...p,parked:false,completed:true,completedOn:todayDS()};return{...p,completed:false,completedOn:undefined};}));}} title={proj.completed?"Mark active":proj.parked?"Mark complete":"Park project"}>{proj.completed?"✅":proj.parked?"🅿️":"🟢"}</span>
+          <span style={{fontWeight:600,fontSize:".9rem",flex:1,color:proj.parked?C.text3:C.text,marginLeft:4,cursor:"pointer"}} onClick={()=>setCollapsed(c=>({...c,[proj.id]:!c[proj.id]}))}>{proj.name}</span>
+          {proj.completed?<span style={{fontSize:".75rem",color:C.pc,fontWeight:600}}>Completed {proj.completedOn}</span>:<span style={{fontSize:".75rem",color:C.text3}}>{pt.length} task{pt.length!==1?"s":""}</span>}
+          <span style={{display:"inline-flex",flexDirection:"column",gap:0,marginLeft:2}}>{arrowBtn("▴",idx===0,()=>moveProject(idx,-1))}{arrowBtn("▾",idx===projects.length-1,()=>moveProject(idx,1))}</span>
+          {!proj.completed&&<button style={{...S.btnIcon,marginLeft:4,background:C.accent,borderColor:C.accent,color:"#fff",fontSize:".72rem",fontWeight:600,width:"auto",padding:"0 10px",height:26}} onClick={e=>{e.stopPropagation();setEditTask(null);setAddingTo(proj.id);setAddingToToday(false);setShowTask(true);}}>+ Task</button>}
+          {proj.id!=="misc"&&<button style={{...S.btnIcon,marginLeft:2}} onClick={e=>{e.stopPropagation();setConfirm({type:"project",id:proj.id,name:proj.name});}}>🗑</button>}
+        </div>
+        {isOpen&&<div style={{padding:"4px 10px"}}>
+          {pt.length===0&&!proj.completed&&<div style={{color:C.text3,fontSize:".83rem",padding:"4px 0"}}>No tasks yet.</div>}
+          {proj.completed&&pt.length===0&&<div style={{color:C.text3,fontSize:".83rem",padding:"4px 0",fontStyle:"italic"}}>All tasks completed.</div>}
+          {["A","B","C"].map(pri=>{
+            const priTasks=pt.filter(t=>t.priority===pri&&!t.recur);
+            if(!priTasks.length)return null;
+            const pc=priCol[pri];const isSub=pri==="B"||pri==="C";
+            const _projPriKey=proj.id+pri; // drag uses dragRef
+            return <div key={pri} style={{marginBottom:4,opacity:isSub?.85:1}}>
+              <div style={{display:"inline-flex",padding:"2px 8px",borderRadius:10,fontSize:".71rem",fontWeight:700,marginBottom:4,background:pc.bg,color:pc.color}}>{priLabel[pri]}</div>
+              {priTasks.map((task,ti)=>(
+                <div key={task.id} draggable
+                  onDragStart={()=>{dragRef.current={idx:ti,projId:proj.id,pri};}}
+                  onDragOver={e=>{e.preventDefault();const r=dragRef.current;if(r.idx===null||r.idx===ti||r.projId!==proj.id||r.pri!==pri)return;const arr=[...priTasks];const[m]=arr.splice(r.idx,1);arr.splice(ti,0,m);dragRef.current.idx=ti;reorderTasks(proj.id,pri,arr);}}
+                  onDragEnd={()=>{dragRef.current={idx:null,projId:null,pri:null};}} style={{display:"flex",alignItems:"flex-start",gap:4}}>
+                  <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={!!proj.parked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                    <div style={{display:"flex",gap:4}}>
+                      {!task.today&&task.priority==="A"&&proj.id!=="misc"&&<button onClick={()=>setTasks(prev=>prev.map(x=>x.id===task.id?{...x,onDeck:!x.onDeck}:x))} style={{padding:"2px 8px",fontSize:".7rem",color:task.onDeck?C.pa:C.text3,border:`1px solid ${task.onDeck?C.pa:C.border}`,borderRadius:8,background:task.onDeck?"#fde8e7":"transparent",cursor:"pointer"}}>{task.onDeck?"− Deck":"+ Deck"}</button>}
+                      <button onClick={()=>task.today?removeFromToday(task.id):addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:task.today?"#B8941F":C.text3,border:`1px solid ${task.today?"#B8941F":C.border}`,borderRadius:8,background:task.today?C.td2:"transparent",cursor:"pointer"}}>{task.today?"− Today":"+ Today"}</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>;
+          })}
+        </div>}
+      </div>);
+    })}
+    <button style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:10,border:`1.5px dashed ${C.border}`,borderRadius:12,color:C.text3,fontSize:".84rem",width:"100%",background:"transparent",cursor:"pointer"}} onClick={()=>setShowProj(true)}>＋ New Project</button>
+    {(()=>{
+      const completedProjs=projects.filter(p=>p.completed);
+      if(!completedProjs.length)return null;
+      return(<div style={{background:C.card,border:`1px solid #c8d8b8`,borderRadius:12,marginTop:8,overflow:"hidden"}}>
+        <div style={{padding:"7px 12px",background:"#e8f4e6",fontFamily:"Georgia,serif",fontWeight:600,fontSize:".9rem",color:"#2a4a28"}}>✅ Completed Projects</div>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
+          <thead><tr>
+            <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Project</th>
+            <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Completed</th>
+            <th style={{padding:"5px 12px",borderBottom:`1px solid #c8d8b8`}}></th>
+          </tr></thead>
+          <tbody>{completedProjs.map((p,i)=>(
+            <tr key={p.id} style={{background:i%2===0?"#f4faf4":C.card}}>
+              <td style={{padding:"6px 12px",color:C.text,fontSize:".85rem"}}>{p.name}</td>
+              <td style={{padding:"6px 12px",color:C.text3,fontSize:".82rem"}}>{p.completedOn||"—"}</td>
+              <td style={{padding:"6px 12px",textAlign:"right"}}>
+                <button onClick={()=>setProjects(projects.map(x=>x.id===p.id?{...x,completed:false,completedOn:undefined}:x))} style={{fontSize:".72rem",color:C.text3,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>Reopen</button>
+              </td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>);
+    })()}
+    {confirm&&<Confirm title={confirm.type==="project"?"Delete Project?":"Delete Task?"} body={`Delete "${confirm.name}"?${confirm.type==="project"?" All tasks inside will also be deleted.":""}`} onOk={doDelete} onCancel={()=>setConfirm(null)}/>}
+    {showTask&&<TaskModal task={editTask} projects={projects} defaultProjectId={addingTo||"misc"} onSave={saveTask} onClose={()=>{setShowTask(false);setEditTask(null);setAddingTo(null);setAddingToToday(false);}} onRemoveToday={id=>{removeFromToday(id);setShowTask(false);setEditTask(null);}} onDelete={id=>{setTasks(prev=>prev.filter(t=>t.id!==id));setShowTask(false);setEditTask(null);}}/>}
+    {showProj&&<ProjectModal onSave={addProject} onClose={()=>setShowProj(false)}/>}
+    {progressPrompt&&<ProgressPromptModal task={progressPrompt} onLog={handleProgressLog} onClose={()=>setProgressPrompt(null)}/>}
+  </div>);
+}
+
+function ViewTaskModal({task,projects,onClose,onSave,onReopen,fmtDate}){const [notes,setNotes]=useState(task.notes||"");const proj=projects.find(p=>p.id===task.projectId)||{name:"Misc"};const dateStr=task.doneDate&&task.doneDate!=="trivial"?fmtDate(task.doneDate):"";return(<div style={S.overlay} onClick={onClose}><div style={S.modal} onClick={e=>e.stopPropagation()}><div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:4}}>{task.title}</div><div style={{fontSize:".78rem",color:C.text3,marginBottom:12}}>{dateStr?"Completed "+dateStr+" · ":""}{proj.name}</div><div style={{marginBottom:12}}><label style={{display:"block",fontSize:".82rem",fontWeight:600,color:C.text2,marginBottom:4}}>Notes</label><textarea style={{...S.textarea,minHeight:80}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Add a note…"/></div><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}><button style={btn("ghost")} onClick={onClose}>Close</button><button style={btn("ghost")} onClick={()=>onSave(task.id,notes)}>Save</button><button style={btn("primary")} onClick={()=>onReopen(task.id,notes)}>↩ Reopen</button></div></div></div>);}
+
+function CompletedTab({tasks,projects,setTasks}){
+  const [sortBy,setSortBy]=useState("date");const [filterProj,setFilterProj]=useState("all");const [search,setSearch]=useState("");const [lastDeleted,setLastDeleted]=useState(null);const [viewTask,setViewTask]=useState(null);
+  const getProj=id=>projects.find(p=>p.id===id);const fmtDate=d=>{if(!d||d==="trivial")return"";const[y,m,day]=d.split("-");return`${m}/${day}/${y.slice(2)}`;};
+  const done=tasks.filter(t=>t.doneDate&&t.doneDate!=="trivial"&&(filterProj==="all"||t.projectId===filterProj)&&(!search||t.title.toLowerCase().includes(search.toLowerCase()))).sort((a,b)=>{if(sortBy==="date")return b.doneDate.localeCompare(a.doneDate);if(sortBy==="task")return a.title.localeCompare(b.title);return 0;});
+  const usedProjects=[...new Set(tasks.filter(t=>t.doneDate).map(t=>t.projectId))].map(id=>getProj(id)).filter(Boolean);
+  return(<div style={S.card}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+      <div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600}}>Completed Tasks</div>
+      {usedProjects.length>1&&<select style={{...S.select,width:"auto",fontSize:".75rem",padding:"4px 6px"}} value={filterProj} onChange={e=>setFilterProj(e.target.value)}><option value="all">All Projects</option>{usedProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+      <input style={{...S.input,flex:1,fontSize:"16px"}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"/>
+      {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:"1rem"}}>✕</button>}
+    </div>
+    {lastDeleted&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",marginBottom:8,background:C.bg2,border:`1px solid ${C.border}`,borderRadius:8,fontSize:".82rem"}}><span style={{flex:1,color:C.text2}}>"{lastDeleted.title}" deleted</span><button onClick={()=>{setTasks(prev=>[...prev,lastDeleted]);setLastDeleted(null);}} style={{padding:"3px 10px",borderRadius:8,border:`1px solid ${C.accent}`,background:"transparent",color:C.accent,fontSize:".78rem",fontWeight:600,cursor:"pointer"}}>Undo</button><button onClick={()=>setLastDeleted(null)} style={{background:"none",border:"none",cursor:"pointer",color:C.text3}}>✕</button></div>}
+    {done.length===0?<div style={{textAlign:"center",padding:"28px 16px",color:C.text3}}><div style={{fontSize:"2rem",marginBottom:6}}>📋</div><p style={{fontSize:".86rem"}}>No completed tasks yet.</p></div>:(
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
+        <thead><tr>{[["Task","task"],["Project","project"],["Done","date"],["",""]].map(([h,s])=><th key={h} onClick={s?()=>setSortBy(s):undefined} style={{textAlign:"left",padding:"6px 8px",borderBottom:`2px solid ${C.border}`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:s&&sortBy===s?C.accent:C.text3,cursor:s?"pointer":"default",userSelect:"none"}}>{h}{s&&sortBy===s?" ▾":""}</th>)}</tr></thead>
+        <tbody>{done.map(t=>{const proj=getProj(t.projectId)||{name:"Misc"};return <tr key={t.id}><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`}}><span style={{cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:3}} onClick={()=>setViewTask(t)}>{t.title}</span></td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,color:C.text3,fontSize:".78rem"}}>{proj.name}</td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap",color:C.text3}}>{fmtDate(t.doneDate)}</td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`}}><div style={{display:"flex",gap:4}}>{!t.trivial&&<button style={{...S.btnIcon,fontSize:".75rem"}} onClick={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,trivial:true,doneDate:"trivial"}:x))} title="Mark trivial">🧹</button>}<button style={S.btnIcon} onClick={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,doneDate:null}:x))} title="Reopen">↩</button><button style={S.btnIcon} onClick={()=>{setLastDeleted(t);setTasks(prev=>prev.filter(x=>x.id!==t.id));}}>🗑</button></div></td></tr>;})}</tbody>
+      </table>
+    )}
+    {viewTask&&<ViewTaskModal task={viewTask} projects={projects} onClose={()=>setViewTask(null)} onSave={(id,notes)=>{setTasks(prev=>prev.map(t=>t.id===id?{...t,notes}:t));setViewTask(null);}} onReopen={(id,notes)=>{setTasks(prev=>prev.map(t=>t.id===id?{...t,doneDate:null,notes}:t));setViewTask(null);}} fmtDate={fmtDate}/>}
+  </div>);
+}
+
+function getCheckInType(){const h=new Date().getHours();if(h>=9&&h<12)return"morning";if(h>=12&&h<17)return"midday";if(h>=17&&h<24||h===0)return"evening";return null;}
+const CI={
+  morning:{emoji:"🌅",label:"Morning",title:"How are you feeling and what kind of day are you planning?",placeholder:"Share how you're feeling — use # to add tasks",bg:C.mo2,border:C.mo,showMood:false,prompt:(r,ctx)=>`Morning check-in. User shared: "${r}". Respond warmly — acknowledge how they're feeling first, then gently engage with their plans. Context: ${ctx}`},
+  midday:{emoji:"☀️",label:"Midday",title:"How's your day going so far?",placeholder:"On track? Stuck? Use # to add tasks",bg:C.pg2,border:C.pg,showMood:true,prompt:(r,ctx)=>`Midday check-in. User said: "${r}". Check in on energy and progress. Context: ${ctx}`},
+  evening:{emoji:"🌇",label:"Evening",title:"How did your day go?",placeholder:"Reflect on your day — use # to add tasks for tomorrow",bg:C.td2,border:C.td,showMood:true,prompt:(r,ctx)=>`Evening check-in. User said: "${r}". Respond warmly, acknowledge what they accomplished, offer one gentle reflection. Context: ${ctx}`},
+};
+
+function CheckInPanel({moodData,actData,tasks,coachLogs,dismissed,onDismiss,onSaveLog,setTasks,moodWords,onSaveMood,onSaveAct}){
+  const type=getCheckInType();const todayKey=todayDS();const existingLog=(coachLogs[todayKey]||[]).find(l=>l.type===type);
+  const [mood,setMood]=useState(existingLog?.mood||moodData[todayKey]?.mood||"");const [words,setWords]=useState(existingLog?.words||moodData[todayKey]?.words||[]);const [phys,setPhys]=useState(existingLog?.phys||actData[todayKey]?.phys||"");
+  const [reply,setReply]=useState("");const [chatHist,setChatHist]=useState(existingLog?(existingLog.messages||[]).filter(m=>m.content!=="__pending__"):[]);const [loading,setLoading]=useState(false);const [error,setError]=useState("");const [started,setStarted]=useState(!!existingLog);const [tasksAdded,setTasksAdded]=useState([]);const msgsRef=useRef(null);
+  useEffect(()=>{if(msgsRef.current)msgsRef.current.scrollTop=msgsRef.current.scrollHeight;},[chatHist,loading]);
+  if(!type)return null;
+  const cfg=CI[type];const isEvening=type==="evening";
+  const moodOpts=[{v:"good",em:"😊",lb:"Good"},{v:"okay",em:"😐",lb:"OK"},{v:"hard",em:"😔",lb:"Hard"}];const actOpts=[{v:"great",em:"💪",lb:"Great"},{v:"okay",em:"🚶",lb:"Okay"},{v:"skip",em:"🛋",lb:"Skipped"}];
+  const saveToCalendars=(m,w,p)=>{if(m&&onSaveMood){const ex=moodData[todayKey]||{};onSaveMood(todayKey,{...ex,mood:m,words:w||[]});}if(isEvening&&p&&onSaveAct){const ex=actData[todayKey]||{};onSaveAct(todayKey,{...ex,phys:p});}};
+  const buildCtx=()=>{const recent=[];for(let i=0;i<5;i++){const d=new Date();d.setDate(d.getDate()-i);const k=toDS(d.getFullYear(),d.getMonth(),d.getDate());if(moodData[k]||actData[k])recent.push({date:k,mood:moodData[k]?.mood,phys:actData[k]?.phys});}const ts=tasks.filter(t=>!t.doneDate).slice(0,8).map(t=>`[${t.priority}${t.today?"★":""}${t.waiting?"⏳":""}] ${t.title}`);return`Recent: ${JSON.stringify(recent)}. Tasks: ${ts.join(", ")||"none"}.`;};
+  const send=async(msg)=>{
+    const text=msg||reply.trim();if(!text||loading)return;setReply("");setLoading(true);setError("");setStarted(true);
+    saveToCalendars(mood,words,phys);
+    storageSet("wh_draft_"+todayDS()+"_"+type,{text,mood,words,phys,savedAt:new Date().toISOString()});
+    const hashTasks=extractHashTasks(text);if(hashTasks.length&&setTasks){setTasks(prev=>[...prev,...hashTasks.map(title=>({id:uid(),title,priority:"A",projectId:"misc",addedDate:todayDS(),doneDate:null,today:true}))]);setTasksAdded(hashTasks);setTimeout(()=>setTasksAdded([]),4000);}
+    const isFirst=chatHist.length===0;const moodCtx=mood?` Mood: ${mood}.`:"";const actCtx=isEvening&&phys?` Activity: ${phys}.`:"";
+    const userMsg={role:"user",content:text};const apiMsg=isFirst?{role:"user",content:cfg.prompt(text+moodCtx+actCtx,buildCtx())}:userMsg;const displayHist=[...chatHist,userMsg];setChatHist(displayHist);
+    try{const r=await askCoach(isFirst?[apiMsg]:[...chatHist,userMsg],buildCtx());const updatedHist=[...displayHist,{role:"assistant",content:r}];setChatHist(updatedHist);if(onSaveLog)onSaveLog(todayDS(),type,updatedHist,{mood,words,phys});}
+    catch(e){const offline=e.message.includes("429")||e.message.includes("Rate limit")||e.message.includes("Network")||e.message.includes("401");if(offline){const ph=[...displayHist,{role:"assistant",content:"__pending__",pendingAt:new Date().toISOString()}];setChatHist(ph);if(onSaveLog)onSaveLog(todayDS(),type,ph,{mood,words,phys});setError("Coach is unavailable — your thoughts are saved.");}else{setError(e.message);setChatHist(h=>[...h,{role:"assistant",content:"Sorry, had trouble responding. Try again."}]);}}
+    setLoading(false);
+  };
+  if(dismissed)return(<div style={{background:`linear-gradient(135deg,${cfg.bg},${C.bg2})`,border:`1.5px solid ${cfg.border}`,borderRadius:14,marginBottom:16,padding:"10px 14px",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={onDismiss}><span style={{fontFamily:"Georgia,serif",fontSize:".95rem",fontWeight:600,flex:1}}>{cfg.emoji} {cfg.label} check-in</span><span style={{color:C.text3,fontSize:".85rem"}}>▾ open</span></div>);
+  return(<div style={{background:`linear-gradient(135deg,${cfg.bg},${C.bg2})`,border:`1.5px solid ${cfg.border}`,borderRadius:14,marginBottom:16,overflow:"hidden"}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",cursor:"pointer"}} onClick={onDismiss}>
+      <span style={{fontFamily:"Georgia,serif",fontSize:".95rem",fontWeight:600,flex:1}}>{cfg.emoji} {cfg.title}</span>
+      <span style={{color:C.text3,fontSize:".85rem"}}>▴ close</span>
+    </div>
+    <div style={{padding:"0 10px 10px"}}>
+      {cfg.showMood&&<div style={{display:"flex",gap:6,marginBottom:8}}>{moodOpts.map(o=><button key={o.v} onClick={()=>setMood(o.v)} style={{flex:1,padding:"4px 2px",borderRadius:8,border:`2px solid ${mood===o.v?C.accent:C.border}`,background:mood===o.v?C.accent+"22":"rgba(255,255,255,.7)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><span style={{fontSize:"1rem"}}>{o.em}</span>{mood===o.v&&<span style={{fontSize:".7rem",color:C.accent,fontWeight:600}}>{o.lb}</span>}</button>)}</div>}
+      {isEvening&&<div style={{display:"flex",gap:6,marginBottom:8}}>{actOpts.map(o=><button key={o.v} onClick={()=>setPhys(o.v)} style={{flex:1,padding:"4px 2px",borderRadius:8,border:`2px solid ${phys===o.v?"#7a5010":C.border}`,background:phys===o.v?"#fef3e2":"rgba(255,255,255,.7)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><span style={{fontSize:"1rem"}}>{o.em}</span>{phys===o.v&&<span style={{fontSize:".7rem",color:"#7a5010",fontWeight:600}}>{o.lb}</span>}</button>)}</div>}
+      {type==="evening"&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>{(moodWords||[]).slice(0,8).map(w=><button key={w} onClick={()=>setWords(ws=>ws.includes(w)?ws.filter(x=>x!==w):[...ws,w])} style={{padding:"3px 10px",borderRadius:12,border:`1px solid ${words.includes(w)?C.accent:C.border}`,background:words.includes(w)?C.accent+"22":"rgba(255,255,255,.7)",fontSize:".76rem",cursor:"pointer",color:words.includes(w)?C.accent:C.text2}}>{w}</button>)}</div>}
+      {started&&<div ref={msgsRef} style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,marginBottom:10,padding:"2px 4px 2px 8px"}}>
+        {chatHist.filter(m=>m.content!=="__pending__").map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",width:"100%"}}><div style={{maxWidth:"85%",padding:"8px 12px",fontSize:".85rem",lineHeight:1.52,wordBreak:"break-word",borderRadius:m.role==="user"?"10px 10px 2px 10px":"10px 10px 10px 2px",background:m.role==="user"?C.accent:"rgba(255,255,255,.85)",color:m.role==="user"?"#fff":C.text,border:m.role==="user"?"none":`1px solid ${C.border}`,whiteSpace:"pre-wrap"}}>{m.content}</div></div>)}
+        {loading&&<div style={{alignSelf:"flex-start",padding:"8px 12px",borderRadius:"10px 10px 10px 2px",background:"rgba(255,255,255,.85)",border:`1px solid ${C.border}`,fontSize:".85rem",color:C.text3,fontStyle:"italic"}}>Thinking…</div>}
+      </div>}
+      {error&&<div style={{fontSize:".78rem",color:C.pa,marginBottom:6}}>⚠️ {error}</div>}
+      {tasksAdded.length>0&&<div style={{fontSize:".78rem",color:"#6b4c0a",background:C.td2,border:"1px solid #D4A820",borderRadius:6,padding:"4px 8px",marginBottom:6}}>🌅 Added to Today: {tasksAdded.join(", ")}</div>}
+      <div style={{display:"flex",gap:8}}>
+        <textarea style={{...S.input,flex:1,background:"rgba(255,255,255,.7)",minHeight:44,maxHeight:120,resize:"none",lineHeight:1.4}} value={reply} onChange={e=>setReply(e.target.value)} placeholder={started?"Continue…":cfg.placeholder} rows={2}/>
+        <button style={btn("primary")} onClick={()=>send()} disabled={!reply.trim()||loading}>{loading?"…":"Send"}</button>
+      </div>
+    </div>
+  </div>);
+}
+
+function PendingCatchupBanner({coachLogs,onSaveLog}){
+  const [catching,setCatching]=useState(false);const [done,setDone]=useState(false);const [status,setStatus]=useState("");
+  const pending=useMemo(()=>{const found=[];Object.entries(coachLogs).forEach(([dk,logs])=>{logs.forEach((log,li)=>{if(log.messages.some(m=>m.content==="__pending__"))found.push({dateKey:dk,logIndex:li,log});});});return found;},[coachLogs]);
+  if(!pending.length||done)return null;
+  const catchUp=async()=>{setCatching(true);for(const{dateKey,log}of pending){setStatus(`Catching up on your ${log.type} check-in from ${dateKey}…`);const cleanMsgs=log.messages.filter(m=>m.content!=="__pending__");try{const r=await askCoach(cleanMsgs);onSaveLog(dateKey,log.type,[...cleanMsgs,{role:"assistant",content:r}]);}catch(e){setStatus("Still offline — try again later.");setCatching(false);return;}}setStatus("");setCatching(false);setDone(true);};
+  return(<div style={{background:"#FEF3C7",border:"1.5px solid #D4A820",borderRadius:12,padding:"12px 14px",marginBottom:16,display:"flex",alignItems:"flex-start",gap:10}}>
+    <span style={{fontSize:"1.2rem",flexShrink:0}}>⏳</span>
+    <div style={{flex:1}}><div style={{fontWeight:600,fontSize:".88rem",marginBottom:3}}>{pending.length} check-in {pending.length===1?"response":"responses"} waiting</div><div style={{fontSize:".8rem",color:"#6b4c0a"}}>{catching?status:"Your thoughts were saved while Coach was offline. Ready to respond now."}</div></div>
+    {!catching&&<button onClick={catchUp} style={{flexShrink:0,padding:"6px 14px",background:"#B8941F",color:"#fff",border:"none",borderRadius:8,fontSize:".82rem",fontWeight:600,cursor:"pointer"}}>Catch up</button>}
+    {catching&&<div style={{flexShrink:0,fontSize:".82rem",color:"#6b4c0a",fontStyle:"italic"}}>Working…</div>}
+  </div>);
+}
+
+const QPS={fitness:"Give me a specific fitness suggestion — one concrete thing I can do this week to improve flexibility, strength, or cardio.",procrastination:"I've been procrastinating. Don't give me tips — ask me ONE thoughtful question to help me understand why.",retired:"I'm retired and sometimes feel like I'm drifting. Help me think about this meaningfully.",moving:"I need to get moving today. Suggest one small, specific physical thing I can do right now.",focus:"Looking at my active tasks, what should I focus on today? Help me pick the most important one or two.",routine:"Help me think about building a daily routine for a retired, project-oriented person who wants structure but not rigidity.",moodact:"What connection do you see between my mood and activity levels based on my data?"};
+
+function CoachTab({moodData,actData,tasks,projects,setTasks,coachMemory,onUpdateMemory,coachLogs,onSaveLog,checkInDismissed,onDismissCheckIn,moodWords,onSaveMood,onSaveAct}){
+  const [insight,setInsight]=useState("Tap Refresh for your check-in insight.");const [insightLoading,setInsightLoading]=useState(false);const [insightDismissed,setInsightDismissed]=useState(false);const [insightError,setInsightError]=useState("");const [insightSecs,setInsightSecs]=useState(0);const [chatCollapsed,setChatCollapsed]=useState(true);const [patResult,setPatResult]=useState("");const [patLoading,setPatLoading]=useState(false);const [chatHist,setChatHist]=useState([]);const [chatLoaded,setChatLoaded]=useState(false);const [input,setInput]=useState("");const [chatLoading,setChatLoading]=useState(false);const [error,setError]=useState("");const msgsRef=useRef(null);const insightLoadedRef=useRef(false);
+  useEffect(()=>{const tl=(coachLogs[todayDS()]||[]).find(l=>l.type==="chat");if(tl)setChatHist(tl.messages);setChatLoaded(true);},[]);
+  useEffect(()=>{if(chatLoaded&&chatHist.length>0&&onSaveLog)onSaveLog(todayDS(),"chat",chatHist);},[chatHist,chatLoaded]);
+  useEffect(()=>{if(msgsRef.current)msgsRef.current.scrollTop=msgsRef.current.scrollHeight;},[chatHist,chatLoading]);
+  const buildCtx=useCallback(()=>{const recent=[];for(let i=0;i<7;i++){const d=new Date();d.setDate(d.getDate()-i);const k=toDS(d.getFullYear(),d.getMonth(),d.getDate());if(moodData[k]||actData[k])recent.push({date:k,mood:moodData[k]?.mood||null,phys:actData[k]?.phys||null});}const active=tasks.filter(t=>!t.doneDate).slice(0,6).map(t=>`[${t.priority}] ${t.title}`);const compl=tasks.filter(t=>t.doneDate).slice(-4).map(t=>t.title);const memStr=coachMemory.insights.length>0?"\n\nFrom past sessions:\n"+coachMemory.insights.map((m,i)=>`${i+1}. ${m}`).join("\n"):"";return`Recent 7 days: ${JSON.stringify(recent)}. Active: ${active.join(", ")||"none"}. Completed: ${compl.join(", ")||"none"}.${memStr}`;},[moodData,actData,tasks,coachMemory]);
+  const loadInsight=async()=>{setInsightLoading(true);setInsight("Thinking…");setInsightError("");setInsightSecs(0);const timer=setInterval(()=>setInsightSecs(s=>s+1),1000);const ht=setTimeout(()=>{clearInterval(timer);setInsightLoading(false);setInsight("");setInsightError("Timed out — tap Refresh again.");},30000);try{const h=new Date().getHours();const tc=h<12?"morning":h<17?"midday":"evening";const txt=await askCoach([{role:"user",content:`It is ${tc}. Give me one brief wellness insight or gentle nudge for the day ahead. Warm, personal, 2 sentences max.`}],buildCtx());if(txt&&txt.length>20){setInsight(txt);storageSet("wh_insight_today",{date:todayDS(),text:txt});}else{setInsight("");setInsightError("Empty response — tap Refresh to try again.");}}catch(e){setInsight("");setInsightError("Error: "+e.message);}clearInterval(timer);clearTimeout(ht);setInsightLoading(false);};
+  useEffect(()=>{if(insightLoadedRef.current)return;insightLoadedRef.current=true;storageGet("wh_insight_today",null).then(saved=>{if(saved&&saved.date===todayDS()&&saved.text&&saved.text.length>20)setInsight(saved.text);else setInsight("Tap Refresh for your check-in insight.");});},[]);
+  const doPatterns=async()=>{setPatLoading(true);setPatResult("");setError("");try{const txt=await askCoach([{role:"user",content:"Look at my mood and activity data. What patterns do you see? Be specific and personal."}],buildCtx());setPatResult(txt);}catch(e){setError(e.message);}setPatLoading(false);};
+  const sendMsg=async(override)=>{const msg=override||input.trim();if(!msg||chatLoading)return;setInput("");setError("");const newHist=[...chatHist,{role:"user",content:msg}];setChatHist(newHist);setChatLoading(true);try{const reply=await askCoach(newHist,buildCtx());const updated=[...newHist,{role:"assistant",content:reply}];setChatHist(updated.length>20?updated.slice(-20):updated);}catch(e){if(e.message.includes("Rate limit")||e.message.includes("429")||e.message.includes("Network"))setError("Coach is offline — try again later.");else setChatHist(h=>[...h,{role:"assistant",content:"Sorry: "+e.message}]);}setChatLoading(false);};
+  return(<div>
+    <PendingCatchupBanner coachLogs={coachLogs||{}} onSaveLog={onSaveLog||(()=>{})}/>
+    {(()=>{const type=getCheckInType();const showCheckin=type&&!checkInDismissed;return(<>
+      <div style={{background:"linear-gradient(135deg,#F5EDE0,#EDE3D4)",border:`1px solid ${C.accent2}`,borderRadius:12,marginBottom:showCheckin?0:16,overflow:"hidden",borderBottomLeftRadius:showCheckin?0:12,borderBottomRightRadius:showCheckin?0:12}}>
+        <div style={{display:"flex",alignItems:"center",padding:"10px 14px",cursor:"pointer",userSelect:"none"}} onClick={()=>setInsightDismissed(v=>!v)}>
+          <span style={{...S.secLbl,marginBottom:0,flex:1}}>Check-in Insight</span>
+          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+            {!insightDismissed&&<button style={{...btn("ghost"),padding:"3px 8px",fontSize:".78rem"}} onClick={e=>{e.stopPropagation();loadInsight();}} disabled={insightLoading}>{insightLoading?`… (${insightSecs}s)`:"Refresh"}</button>}
+            <span style={{color:C.text3,fontSize:".8rem"}}>{insightDismissed?"▾":"▴"}</span>
+          </div>
+        </div>
+        {!insightDismissed&&<div style={{padding:"0 14px 14px"}}>
+          {insightError&&<div style={{fontSize:".8rem",color:C.pa,marginBottom:4}}>⚠️ {insightError}</div>}
+          {insight&&<div style={{fontFamily:"Georgia,serif",fontSize:".95rem",fontStyle:"italic",lineHeight:1.72,color:C.text}}>{insight}</div>}
+        </div>}
+      </div>
+      {type&&<div style={{marginBottom:16}}><CheckInPanel moodData={moodData} actData={actData} tasks={tasks} coachLogs={coachLogs} dismissed={checkInDismissed} onDismiss={onDismissCheckIn} onSaveLog={onSaveLog} setTasks={setTasks} moodWords={moodWords} onSaveMood={onSaveMood} onSaveAct={onSaveAct}/></div>}
+    </>);})()}
+    {(coachLogs[todayDS()]||[]).filter(l=>["morning","midday","evening"].includes(l.type)&&l.type!==getCheckInType()&&l.messages?.filter(m=>m.content!=="__pending__").length>0).map((log,i)=>{const cfg2=CI[log.type]||{};return <CoachLogAddon key={i} log={log} dateKey={todayDS()} onSaveLog={onSaveLog} setTasks={setTasks} customLabel={`${cfg2.emoji||""} ${cfg2.label||log.type}`}/>;})}
+    {error&&<div style={{background:"#fde8e7",border:`1px solid ${C.pa}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:".83rem",color:C.pa,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span>⚠️ {error}</span><button onClick={()=>setError("")} style={{background:"none",border:"none",cursor:"pointer",color:C.pa,fontWeight:700,fontSize:".8rem"}}>▴ dismiss</button></div>}
+    {coachMemory.insights.length>0&&<div style={{...S.card,marginBottom:18}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600}}>🧠 What Coach Remembers</div><button onClick={()=>onUpdateMemory({insights:[],lastUpdated:null})} style={{fontSize:".72rem",color:C.text3,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Clear all</button></div><ul style={{margin:0,padding:"0 0 0 18px",display:"flex",flexDirection:"column",gap:4}}>{coachMemory.insights.map((ins,i)=><li key={i} style={{fontSize:".83rem",color:C.text2,lineHeight:1.5,display:"flex",alignItems:"flex-start",gap:6,listStyle:"none",paddingLeft:0}}><span style={{color:C.accent,flexShrink:0}}>•</span><span>{ins}</span><button onClick={()=>onUpdateMemory({...coachMemory,insights:coachMemory.insights.filter((_,j)=>j!==i)})} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:".75rem",flexShrink:0}}>✕</button></li>)}</ul><div style={{marginTop:8,fontSize:".72rem",color:C.text3}}>Last updated: {coachMemory.lastUpdated?new Date(coachMemory.lastUpdated).toLocaleDateString():"—"}</div></div>}
+    <div style={S.card}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:chatCollapsed?0:12,cursor:"pointer"}} onClick={()=>setChatCollapsed(v=>!v)}>
+        <div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600}}>💬 Ask Coach anything</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+          {!chatCollapsed&&<button onClick={doPatterns} disabled={patLoading} style={{...btn("ghost"),padding:"3px 10px",fontSize:".76rem"}}>{patLoading?"…":"📊 Patterns"}</button>}
+          {!chatCollapsed&&chatHist.length>0&&<button onClick={()=>{setChatHist([]);if(onSaveLog)onSaveLog(todayDS(),"chat",[]);}} style={{fontSize:".72rem",color:C.text3,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Clear</button>}
+          <span style={{color:C.text3,fontSize:".8rem"}}>{chatCollapsed?"▾":"▴"}</span>
+        </div>
+      </div>
+      {!chatCollapsed&&<div>
+        {Object.entries(coachLogs||{}).filter(([dk,logs])=>dk!==todayDS()&&logs.some(l=>l.type==="chat")).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,7).map(([dk,logs])=>{const cl=logs.find(l=>l.type==="chat");if(!cl)return null;const parts=dk.split("-");return <CoachLogAddon key={dk} log={cl} dateKey={dk} onSaveLog={onSaveLog} customLabel={`💬 ${MONTHS[parseInt(parts[1])-1]} ${parseInt(parts[2])}`}/>;})}
+        <span style={S.secLbl}>Quick Prompts</span>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>{[["💪 Fitness","fitness"],["🧠 Procrastination","procrastination"],["🌅 Drifting","retired"],["🚶 Get Moving","moving"],["🎯 Focus Today","focus"],["🗓 Routine","routine"],["📊 Mood & Activity","moodact"]].map(([label,key])=><button key={key} onClick={()=>sendMsg(QPS[key])} disabled={chatLoading} style={{padding:"6px 12px",borderRadius:20,border:`1px solid ${C.border}`,background:C.bg2,fontSize:".79rem",color:C.text2,cursor:"pointer"}}>{label}</button>)}</div>
+        <div ref={msgsRef} style={{minHeight:180,maxHeight:400,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,background:C.bg,padding:"12px 14px 12px 20px",marginBottom:10,display:"flex",flexDirection:"column",gap:8}}>
+          {chatHist.length===0&&<div style={{alignSelf:"flex-start",maxWidth:"86%",padding:"9px 13px",borderRadius:"10px 10px 10px 2px",background:C.card,border:`1px solid ${C.border}`,fontSize:".85rem",lineHeight:1.52}}>Hi! I'm your wellness coach. Use a quick prompt above, or ask me anything.</div>}
+          {chatHist.map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",width:"100%"}}><div style={{maxWidth:"84%",padding:"9px 13px",fontSize:".85rem",lineHeight:1.52,whiteSpace:"pre-wrap",wordBreak:"break-word",borderRadius:m.role==="user"?"10px 10px 2px 10px":"10px 10px 10px 2px",background:m.role==="user"?C.accent:C.card,color:m.role==="user"?"#fff":C.text,border:m.role==="user"?"none":`1px solid ${C.border}`}}>{m.content}</div></div>)}
+          {chatLoading&&<div style={{alignSelf:"flex-start",padding:"9px 13px",borderRadius:"10px 10px 10px 2px",background:C.card,border:`1px solid ${C.border}`,fontSize:".85rem",color:C.text3,fontStyle:"italic"}}>Thinking…</div>}
+        </div>
+        {patResult&&<div style={{padding:"12px 14px",background:C.bg2,borderRadius:8,border:`1px solid ${C.border}`,fontSize:".85rem",lineHeight:1.6,marginBottom:10,color:C.text}}>{patResult}</div>}
+      </div>}
+      <div style={{display:"flex",gap:8,marginTop:chatCollapsed?0:8}}>
+        <textarea style={{...S.input,flex:1,minHeight:44,maxHeight:120,resize:"none",lineHeight:1.4}} value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask your coach anything…" rows={2}/>
+        <button style={btn("primary")} onClick={()=>{setChatCollapsed(false);sendMsg();}} disabled={chatLoading||!input.trim()}>Send</button>
+      </div>
+    </div>
+  </div>);
+}
+
+
+function SettingsModal({onClose}){
+  const [key,setKey]=useState(getApiKey());
+  const [saved,setSaved]=useState(false);
+  const handleSave=()=>{setApiKey(key.trim());setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  const masked=key?key.slice(0,8)+"…"+key.slice(-4):"";
+  return(<div style={S.overlay} onClick={onClose}><div style={{...S.modal,maxWidth:440}} onClick={e=>e.stopPropagation()}>
+    <div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:4}}>⚙️ Settings</div>
+    <div style={{fontSize:".78rem",color:C.text3,marginBottom:16}}>Your API key is stored locally on this device only.</div>
+    <div style={{marginBottom:16}}>
+      <label style={{display:"block",fontSize:".82rem",fontWeight:600,color:C.text2,marginBottom:6}}>Anthropic API Key</label>
+      <input style={{...S.input,fontFamily:"monospace",fontSize:".82rem"}} type="password" value={key} onChange={e=>{setKey(e.target.value);setSaved(false);}} placeholder="sk-ant-api03-…"/>
+      {key&&<div style={{fontSize:".72rem",color:C.text3,marginTop:4}}>Saved as: {masked}</div>}
+      <div style={{fontSize:".75rem",color:C.text3,marginTop:8}}>Get your key at <strong>console.anthropic.com</strong> → API Keys. Never share it.</div>
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+      <button style={btn("ghost")} onClick={onClose}>Cancel</button>
+      <button style={btn("primary")} onClick={handleSave}>{saved?"✓ Saved!":"Save Key"}</button>
+    </div>
+  </div></div>);
+}
+
+function ExportModal({moodData,actData,tasks,projects,moodWords,actWords,coachLogs,onClose,onImport}){
+  const exportStr=JSON.stringify({exportDate:new Date().toISOString(),moodData,actData,tasks,projects,moodWords,actWords,coachLogs},null,2);
+  const importRef=useRef();
+  const handleImport=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);onImport(d);onClose();alert("✅ Data imported!");}catch{alert("❌ Could not read that file.");}};reader.readAsText(file);e.target.value="";};
+  return(<div style={S.overlay} onClick={onClose}><div style={{...S.modal,maxWidth:500}} onClick={e=>e.stopPropagation()}>
+    <div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:4}}>Export / Import Data</div>
+    <div style={{fontSize:".78rem",color:C.text3,marginBottom:12}}>Copy this JSON to back up all your data. Use Import to restore from a backup file.</div>
+    <textarea id="export-json-ta" style={{...S.textarea,fontFamily:"monospace",fontSize:".72rem",minHeight:240,background:C.bg2}} readOnly value={exportStr} onFocus={e=>{e.target.select();}}/>
+    <div style={{fontSize:".75rem",color:C.text3,marginTop:4,textAlign:"center",marginBottom:12}}>Tap in the box above to select all, then copy</div>
+    <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={handleImport}/>
+    <div style={{display:"flex",justifyContent:"space-between",gap:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+      <button style={btn("ghost")} onClick={()=>importRef.current.click()}>📂 Import from file</button>
+      <div style={{display:"flex",gap:8}}>
+        <button style={btn("primary")} onClick={()=>{const ta=document.getElementById("export-json-ta");if(ta){ta.select();ta.setSelectionRange(0,99999);}try{document.execCommand("copy");alert("Copied!");}catch(e){alert("Tap in the text box, then Select All and Copy.");}}}>Select All & Copy</button>
+        <button style={btn("ghost")} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  </div></div>);
+}
+
+function App(){
+  useEffect(()=>{const style=document.createElement("style");style.innerHTML=`*{box-sizing:border-box!important;}body,html{margin:0!important;padding:0!important;}`;document.head.appendChild(style);return()=>document.head.removeChild(style);},[]);
+  const [tab,setTab]=useState("coach");const [loaded,setLoaded]=useState(false);const [showExport,setShowExport]=useState(false);
+  const [moodData,setMoodData]=useState({});const [actData,setActData]=useState({});const [projects,setProjects]=useState([]);const [tasks,setTasks]=useState([]);const [moodWords,setMoodWords]=useState([]);const [actWords,setActWords]=useState([]);const [coachLogs,setCoachLogs]=useState({});const [coachMemory,setCoachMemory]=useState({insights:[],lastUpdated:null});
+  const [moodModal,setMoodModal]=useState(null);const [wordModal,setWordModal]=useState(null);const [checkInDismissed,setCheckInDismissed]=useState(false);const [showSettings,setShowSettings]=useState(!getApiKey());
+
+  useEffect(()=>{(async()=>{
+    const seeded=await storageGet(STORE_KEYS.seeded,false);
+    if(!seeded){setMoodData(SEED.moodData);setActData(SEED.actData);setTasks(SEED.tasks);setProjects(SEED.projects);setMoodWords(SEED.moodWords);setActWords(SEED.actWords);setCoachLogs(SEED.coachLogs||{});await storageSet(STORE_KEYS.mood,SEED.moodData);await storageSet(STORE_KEYS.act,SEED.actData);await storageSet(STORE_KEYS.tasks,SEED.tasks);await storageSet(STORE_KEYS.projects,SEED.projects);await storageSet(STORE_KEYS.moodWords,SEED.moodWords);await storageSet(STORE_KEYS.actWords,SEED.actWords);await storageSet(STORE_KEYS.coachLogs,SEED.coachLogs||{});await storageSet(STORE_KEYS.seeded,true);}
+    else{const[mood,act,t,p,mw,aw,cl,mem]=await Promise.all([storageGet(STORE_KEYS.mood,SEED.moodData),storageGet(STORE_KEYS.act,SEED.actData),storageGet(STORE_KEYS.tasks,SEED.tasks),storageGet(STORE_KEYS.projects,SEED.projects),storageGet(STORE_KEYS.moodWords,SEED.moodWords),storageGet(STORE_KEYS.actWords,SEED.actWords),storageGet(STORE_KEYS.coachLogs,{}),loadCoachMemory()]);setMoodData(mood);setActData(act);setTasks(t);setProjects(p);setMoodWords(mw);setActWords(aw);setCoachLogs(cl);setCoachMemory(mem);}
+    const h=new Date().getHours();setTab(((h>=9&&h<12)||(h>=12&&h<15)||(h>=17&&h<21))?"coach":"todo");setLoaded(true);
+  })();},[]);
+
+  useEffect(()=>{if(!loaded)return;const today=todayDS();setTasks(prev=>{let changed=false;const updated=prev.map(t=>{if(t.dueDate===today&&!t.today&&!t.doneDate){changed=true;return{...t,today:true};}if(t.inProgress&&!t.doneDate&&!t.today&&t.progressedOn!==today){changed=true;return{...t,today:true};}if(t.completedOn&&t.completedOn!==today){changed=true;return{...t,today:undefined,completedOn:undefined,progressedOn:undefined};}return t;});return changed?updated:prev;});},[loaded]);
+
+  useEffect(()=>{if(loaded)storageSet(STORE_KEYS.mood,moodData);},[moodData,loaded]);
+  useEffect(()=>{if(loaded)storageSet(STORE_KEYS.act,actData);},[actData,loaded]);
+  useEffect(()=>{if(loaded)storageSet(STORE_KEYS.tasks,tasks);},[tasks,loaded]);
+  useEffect(()=>{if(loaded)storageSet(STORE_KEYS.projects,projects);},[projects,loaded]);
+  useEffect(()=>{if(loaded)storageSet(STORE_KEYS.moodWords,moodWords);},[moodWords,loaded]);
+  useEffect(()=>{if(loaded)storageSet(STORE_KEYS.actWords,actWords);},[actWords,loaded]);
+  useEffect(()=>{if(loaded)storageSet(STORE_KEYS.coachLogs,coachLogs);},[coachLogs,loaded]);
+
+  const handleUpdateMemory=mem=>{setCoachMemory(mem);saveCoachMemory(mem);};
+  const saveCoachLog=(dateKey,type,messages,meta={})=>{setCoachLogs(prev=>{const existing=prev[dateKey]||[];const filtered=existing.filter(l=>l.type!==type);return{...prev,[dateKey]:[...filtered,{type,messages,savedAt:new Date().toISOString(),...meta}]};});if(meta.mood&&type!=="chat"){setMoodData(prev=>{const e=prev[dateKey]||{};return{...prev,[dateKey]:{...e,mood:meta.mood,words:meta.words||[]}}});}if(meta.phys&&type==="evening"){setActData(prev=>{const e=prev[dateKey]||{};return{...prev,[dateKey]:{...e,phys:meta.phys}}});}};
+  const handleImport=d=>{if(d.tasks)setTasks(d.tasks);if(d.projects)setProjects(d.projects);if(d.moodData)setMoodData(d.moodData);if(d.actData)setActData(d.actData);if(d.moodWords)setMoodWords(d.moodWords);if(d.actWords)setActWords(d.actWords);if(d.coachLogs)setCoachLogs(d.coachLogs);};
+  const saveMood=(key,data)=>{setMoodData(m=>({...m,[key]:data}));setMoodModal(null);};
+  const handleAddWord=(target,words,setWords)=>setWordModal({target,words,setWords});
+  const saveWord=word=>{const{target,words,setWords}=wordModal;if(target==="mood")setMoodWords(w=>w.includes(word)?w:[...w,word]);else setActWords(w=>w.includes(word)?w:[...w,word]);if(!words.includes(word))setWords([...words,word]);setWordModal(null);};
+
+  const streak=useMemo(()=>{let s=0;const d=new Date();const tk=toDS(d.getFullYear(),d.getMonth(),d.getDate());if(!moodData[tk]&&!actData[tk])d.setDate(d.getDate()-1);for(let i=0;i<365;i++){const k=toDS(d.getFullYear(),d.getMonth(),d.getDate());if(moodData[k]||actData[k]){s++;d.setDate(d.getDate()-1);}else break;}return s;},[moodData,actData]);
+
+  const TABS=[["coach","💬 Coach"],["todo","✅ Today"],["mood","📅 Calendar"],["completed","📋 Done"]];
+
+  if(!loaded)return(<div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}><div style={{textAlign:"center",color:C.text3}}><div style={{fontSize:"2rem",marginBottom:10}}>🌿</div><div style={{fontFamily:"Georgia,serif",fontSize:"1rem"}}>Loading Mizmo Go!…</div></div></div>);
+
+  return(<div style={S.app}>
+    <header style={S.hdr}>
+      <div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:700,color:C.accent}}>Mizmo <em style={{color:C.text,fontWeight:400}}>Go!</em></div>
+      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg2,border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 10px",fontSize:".75rem",fontWeight:600,color:C.accent}}>🔥 {streak} day streak</div>
+        <button onClick={()=>setShowSettings(true)} style={{...S.btnIcon,fontSize:".72rem",padding:"3px 8px",width:"auto",color:C.text3}} title="Settings">⚙️</button><button onClick={()=>setShowExport(true)} style={{...S.btnIcon,fontSize:".72rem",padding:"3px 8px",width:"auto",color:C.text3}} title="Export / Import">⬇️</button>
+      </div>
+    </header>
+    <nav style={S.tabbar}>{TABS.map(([id,label])=><button key={id} style={{flexShrink:0,padding:"6px 6px",background:"none",border:"none",borderBottom:tab===id?`3px solid ${C.accent}`:"3px solid transparent",fontSize:".74rem",fontWeight:tab===id?600:500,color:tab===id?C.accent:C.text2,cursor:"pointer",whiteSpace:"nowrap",transition:"all .18s"}} onClick={()=>setTab(id)}>{label}</button>)}</nav>
+    <div style={S.panel}>
+      {tab==="mood"&&<div style={S.card}><MoodCalendar moodData={moodData} tasks={tasks} coachLogs={coachLogs} onDayClick={setMoodModal}/></div>}
+      {tab==="todo"&&<TodoTab tasks={tasks} projects={projects} setTasks={setTasks} setProjects={setProjects}/>}
+      {tab==="completed"&&<CompletedTab tasks={tasks} projects={projects} setTasks={setTasks}/>}
+      {tab==="coach"&&<CoachTab moodData={moodData} actData={actData} tasks={tasks} projects={projects} setTasks={setTasks} coachMemory={coachMemory} onUpdateMemory={handleUpdateMemory} coachLogs={coachLogs} onSaveLog={saveCoachLog} checkInDismissed={checkInDismissed} onDismissCheckIn={()=>setCheckInDismissed(v=>!v)} moodWords={moodWords} onSaveMood={saveMood} onSaveAct={(key,data)=>setActData(a=>({...a,[key]:data}))}/>}
+    </div>
+    {moodModal&&<MoodModal dateKey={moodModal} moodData={moodData} moodWords={moodWords} tasks={tasks} coachLogs={coachLogs} onSave={saveMood} onClose={()=>setMoodModal(null)} onAddWord={handleAddWord} onSaveLog={saveCoachLog} setTasks={setTasks} onReopenTask={id=>setTasks(prev=>prev.map(t=>t.id===id?{...t,doneDate:null}:t))}/>}
+    {wordModal&&<WordModal onSave={saveWord} onClose={()=>setWordModal(null)}/>}
+    {showSettings&&<SettingsModal onClose={()=>setShowSettings(false)}/> }{showExport&&<ExportModal moodData={moodData} actData={actData} tasks={tasks} projects={projects} moodWords={moodWords} actWords={actWords} coachLogs={coachLogs} onClose={()=>setShowExport(false)} onImport={handleImport}/>}
+  </div>);
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+
+  </script>
+</body>
+</html>
