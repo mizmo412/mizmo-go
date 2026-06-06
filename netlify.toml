@@ -1,5 +1,5 @@
-toml[build]
-  publish = "."
+[build]
+publish = "."
 
 [functions]
-  directory = "netlify/functions"
+directory = "netlify/functions"
