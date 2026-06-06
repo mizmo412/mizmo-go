@@ -124,21 +124,15 @@ async function askCoach(messages,ctx=""){
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),30000);
   let res;
-  const apiKey=getApiKey();
-  const headers={"content-type":"application/json","anthropic-version":"2023-06-01"};
-  if(apiKey){headers["x-api-key"]=apiKey;}
-  else{headers["anthropic-dangerous-direct-browser-access"]="true";}
-  try{res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",signal:controller.signal,headers,body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,stream:true,system:sys,messages:messages.slice(-12)})});}
+  try{res=await fetch("/.netlify/functions/coach",{method:"POST",signal:controller.signal,headers:{"content-type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,stream:false,system:sys,messages:messages.slice(-12)})});}
   catch(e){clearTimeout(timeout);if(e.name==="AbortError")throw new Error("Coach timed out — try again.");throw new Error("Network error: "+e.message);}
-  if(!res.ok){clearTimeout(timeout);if(res.status===429)throw new Error("Rate limit — wait a moment.");if(res.status===401)throw new Error("Session expired — reload.");throw new Error("HTTP "+res.status);}
-  const reader=res.body.getReader();const decoder=new TextDecoder();let fullText="",buffer="";
-  clearTimeout(timeout);const st=setTimeout(()=>{reader.cancel();},25000);
-  try{while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split("\n");buffer=lines.pop();for(const line of lines){if(!line.startsWith("data: "))continue;const j=line.slice(6).trim();if(j==="[DONE]")continue;try{const e=JSON.parse(j);if(e.type==="content_block_delta"&&e.delta?.type==="text_delta")fullText+=e.delta.text;if(e.type==="error")throw new Error(e.error?.message||"stream error");}catch(e){if(e.message&&e.message.includes("stream error"))throw e;}}}}finally{clearTimeout(st);}
-  if(!fullText)throw new Error("No response — try reloading.");
-  // Trim leading punctuation/space that can appear from streaming artifacts
-  return fullText.replace(/^[,\s]+/,"");
+  clearTimeout(timeout);
+  if(!res.ok){if(res.status===429)throw new Error("Rate limit — wait a moment.");if(res.status===401)throw new Error("API key error — check Netlify env vars.");throw new Error("HTTP "+res.status);}
+  const data=await res.json();
+  const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").replace(/^[,\s]+/,"");
+  if(!text)throw new Error("No response — try again.");
+  return text;
 }
-
 async function loadCoachMemory(){try{const r=await window.storage.get("coach_memory");return r?JSON.parse(r.value):{insights:[],lastUpdated:null};}catch(e){return{insights:[],lastUpdated:null};}}
 async function saveCoachMemory(mem){try{await window.storage.set("coach_memory",JSON.stringify(mem));}catch(e){}}
 function extractHashTasks(text){const parts=text.split("#");const tasks=[];for(let i=1;i<parts.length;i++){const t=parts[i].split("\n")[0].trim();if(t)tasks.push(t);}return tasks;}
