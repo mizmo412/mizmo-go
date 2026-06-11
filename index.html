@@ -773,6 +773,9 @@ function SettingsModal({onClose}){
 function ExportModal({moodData,actData,tasks,projects,moodWords,actWords,coachLogs,onClose,onImport}){
   const exportStr=JSON.stringify({exportDate:new Date().toISOString(),moodData,actData,tasks,projects,moodWords,actWords,coachLogs},null,2);
   const importRef=useRef();
+  const [pasteVal,setPasteVal]=React.useState("");
+  const [showPaste,setShowPaste]=React.useState(false);
+  const handlePasteImport=()=>{try{const d=JSON.parse(pasteVal);onImport(d);onClose();alert("✅ Data imported!");}catch{alert("❌ Could not read that JSON. Make sure you copied the full export text.");}};
   const handleImport=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);onImport(d);onClose();alert("✅ Data imported!");}catch{alert("❌ Could not read that file.");}};reader.readAsText(file);e.target.value="";};
   return(<div style={S.overlay} onClick={onClose}><div style={{...S.modal,maxWidth:500}} onClick={e=>e.stopPropagation()}>
     <div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:4}}>Export / Import Data</div>
@@ -781,7 +784,7 @@ function ExportModal({moodData,actData,tasks,projects,moodWords,actWords,coachLo
     <div style={{fontSize:".75rem",color:C.text3,marginTop:4,textAlign:"center",marginBottom:12}}>Tap in the box above to select all, then copy</div>
     <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={handleImport}/>
     <div style={{display:"flex",justifyContent:"space-between",gap:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-      <button style={btn("ghost")} onClick={()=>importRef.current.click()}>📂 Import from file</button>
+      <button style={btn("ghost")} onClick={()=>importRef.current.click()}>📂 Import from file</button><button style={btn("ghost")} onClick={()=>setShowPaste(p=>!p)}>📋 Paste JSON</button>{showPaste&&<div style={{marginTop:8,padding:8,background:C.bg2,borderRadius:8}}><textarea style={{...S.textarea,fontFamily:"monospace",fontSize:".72rem",minHeight:80,background:C.bg}} placeholder="Paste your JSON backup here..." value={pasteVal} onChange={e=>setPasteVal(e.target.value)}/><button style={{...btn("primary"),marginTop:6,width:"100%"}} onClick={handlePasteImport}>✅ Import Pasted JSON</button></div>}
       <div style={{display:"flex",gap:8}}>
         <button style={btn("primary")} onClick={()=>{const ta=document.getElementById("export-json-ta");if(ta){ta.select();ta.setSelectionRange(0,99999);}try{document.execCommand("copy");alert("Copied!");}catch(e){alert("Tap in the text box, then Select All and Copy.");}}}>Select All & Copy</button>
         <button style={btn("ghost")} onClick={onClose}>Close</button>
