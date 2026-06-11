@@ -326,7 +326,7 @@ function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday}){
     <div style={{flex:1,minWidth:0}}>
       <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
         <span style={{fontSize:".83rem",lineHeight:1.3,cursor:"pointer",textDecoration:(task.doneDate||task.progressedOn===todayDS())?"line-through":"underline dotted",textUnderlineOffset:3,color:(task.doneDate||task.progressedOn===todayDS())?C.text3:C.text,opacity:(task.doneDate||task.progressedOn===todayDS())?.7:1}} onClick={()=>onEdit(task)}>{task.title}</span>
-        {task.priority!=="A"&&<span style={{padding:"1px 5px",fontSize:".66rem",fontWeight:700,background:pc.bg,color:pc.color,borderRadius:4}}>{task.priority}</span>}
+        
         {task.inProgress&&!task.waiting&&<span style={{fontSize:".78rem"}}>🔄</span>}
         {task.waiting&&<span style={{fontSize:".78rem"}}>⏳</span>}
         {proj&&proj.id!=="misc"&&<span style={{padding:"1px 6px",fontSize:".66rem",background:C.bg2,color:C.text3,borderRadius:4,border:`1px solid ${C.border}`}}>{proj.name}</span>}
@@ -382,6 +382,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
   const addProject=name=>{setProjects([...projects,{id:uid(),name}]);setShowProj(false);};
   const moveProject=(idx,dir)=>{const next=idx+dir;if(next<0||next>=projects.length)return;const arr=[...projects];[arr[idx],arr[next]]=[arr[next],arr[idx]];setProjects(arr);};
   const priLabel={A:"A – Available",B:"B – Soon",C:"C – Someday"};const priCol={A:{bg:"#fde8e7",color:C.pa},B:{bg:"#fef3e2",color:C.pb},C:{bg:"#e8f4e6",color:C.pc}};
+  const priLabel={A:"Available",B:"Soon",C:"Someday"};
   const dragRef=useRef({idx:null,projId:null,pri:null});
   const todayDragRef=useRef({idx:null});
   const recurDragRef=useRef({idx:null});
@@ -492,7 +493,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                 <span style={{fontSize:".83rem",cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:3}} onClick={()=>{setEditTask(task);setShowTask(true);}}>{task.title}</span>
-                <span style={{padding:"1px 5px",fontSize:".66rem",fontWeight:700,background:pc.bg,color:pc.color,borderRadius:4}}>{task.priority}</span>
+                <span style={{padding:"1px 5px",fontSize:".66rem",fontWeight:700,background:pc.bg,color:pc.color,borderRadius:4}}>{priLabel[task.priority]||task.priority}</span>
                 {task.trivial&&<span style={{fontSize:".75rem"}} title="Trivial">🧹</span>}
                 <span style={{fontSize:".68rem",color:"#4a6a48",background:"#e8f0e0",borderRadius:10,padding:"1px 6px"}}>{recurLabel}</span>
                 {proj&&proj.id!=="misc"&&<span style={{fontSize:".66rem",color:C.text3,background:C.bg2,borderRadius:4,padding:"1px 6px",border:`1px solid ${C.border}`}}>{proj.name}</span>}
@@ -574,6 +575,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
           <thead><tr>
             <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Project</th>
             <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Completed</th>
+            <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Done On</th>
             <th style={{padding:"5px 12px",borderBottom:`1px solid #c8d8b8`}}></th>
           </tr></thead>
           <tbody>{completedProjs.map((p,i)=>(
@@ -615,7 +617,7 @@ function CompletedTab({tasks,projects,setTasks}){
     {done.length===0?<div style={{textAlign:"center",padding:"28px 16px",color:C.text3}}><div style={{fontSize:"2rem",marginBottom:6}}>📋</div><p style={{fontSize:".86rem"}}>No completed tasks yet.</p></div>:(
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
         <thead><tr>{[["Task","task"],["Project","project"],["Done","date"],["",""]].map(([h,s])=><th key={h} onClick={s?()=>setSortBy(s):undefined} style={{textAlign:"left",padding:"6px 8px",borderBottom:`2px solid ${C.border}`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:s&&sortBy===s?C.accent:C.text3,cursor:s?"pointer":"default",userSelect:"none"}}>{h}{s&&sortBy===s?" ▾":""}</th>)}</tr></thead>
-        <tbody>{done.map(t=>{const proj=getProj(t.projectId)||{name:"Misc"};return <tr key={t.id}><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`}}><span style={{cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:3}} onClick={()=>setViewTask(t)}>{t.title}</span></td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,color:C.text3,fontSize:".78rem"}}>{proj.name}</td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap",color:C.text3}}>{fmtDate(t.doneDate)}</td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`}}><div style={{display:"flex",gap:4}}>{!t.trivial&&<button style={{...S.btnIcon,fontSize:".75rem"}} onClick={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,trivial:true,doneDate:"trivial"}:x))} title="Mark trivial">🧹</button>}<button style={S.btnIcon} onClick={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,doneDate:null}:x))} title="Reopen">↩</button><button style={S.btnIcon} onClick={()=>{setLastDeleted(t);setTasks(prev=>prev.filter(x=>x.id!==t.id));}}>🗑</button></div></td></tr>;})}</tbody>
+        <tbody>{done.map(t=>{const proj=getProj(t.projectId)||{name:"Misc"};return <tr key={t.id}><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`}}><span style={{cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:3}} onClick={()=>setViewTask(t)}>{t.title}</span></td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,color:C.text3,fontSize:".78rem"}}>{proj.name}</td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap",color:C.text3}}>{fmtDate(t.doneDate)}</td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap",color:C.text3,fontSize:".75rem"}}>{t.completedOn?fmtDate(t.completedOn):"—"}</td><td style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`}}><div style={{display:"flex",gap:4}}>{!t.trivial&&<button style={{...S.btnIcon,fontSize:".75rem"}} onClick={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,trivial:true,doneDate:"trivial"}:x))} title="Mark trivial">🧹</button>}<button style={S.btnIcon} onClick={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,doneDate:null}:x))} title="Reopen">↩</button><button style={S.btnIcon} onClick={()=>{setLastDeleted(t);setTasks(prev=>prev.filter(x=>x.id!==t.id));}}>🗑</button></div></td></tr>;})}</tbody>
       </table>
     )}
     {viewTask&&<ViewTaskModal task={viewTask} projects={projects} onClose={()=>setViewTask(null)} onSave={(id,notes)=>{setTasks(prev=>prev.map(t=>t.id===id?{...t,notes}:t));setViewTask(null);}} onReopen={(id,notes)=>{setTasks(prev=>prev.map(t=>t.id===id?{...t,doneDate:null,notes}:t));setViewTask(null);}} fmtDate={fmtDate}/>}
