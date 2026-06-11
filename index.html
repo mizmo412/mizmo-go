@@ -257,7 +257,7 @@ function TaskModal({task,projects,defaultProjectId,onSave,onClose,onRemoveToday,
     <div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:16}}>{task?"Edit Task":"Add Task"}</div>
     <FormRow label="Task Title *"><input style={S.input} value={title} onChange={e=>setTitle(e.target.value)} placeholder="What needs to be done?" autoFocus/></FormRow>
     <FormRow label="Project"><select style={S.select} value={projId} onChange={e=>setProjId(e.target.value)}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></FormRow>
-    <FormRow label="Priority"><select style={S.select} value={pri} onChange={e=>setPri(e.target.value)}><option value="A">A – Available</option><option value="B">B – Soon</option><option value="C">C – Someday</option></select></FormRow>
+    <FormRow label="Priority"><select style={S.select} value={pri} onChange={e=>setPri(e.target.value)}><option value="A">Available</option><option value="B">Soon</option><option value="C">Someday</option></select></FormRow>
     <FormRow label="Status">
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!waiting} onChange={e=>{setWaiting(e.target.checked);if(e.target.checked)setInProgress(false);}} style={{width:16,height:16}}/><span>⏳ Waiting</span></label>
@@ -381,7 +381,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
   const doDelete=()=>{if(!confirm)return;if(confirm.type==="task")setTasks(tasks.filter(t=>t.id!==confirm.id));else{setProjects(projects.filter(p=>p.id!==confirm.id));setTasks(tasks.filter(t=>t.projectId!==confirm.id));}setConfirm(null);};
   const addProject=name=>{setProjects([...projects,{id:uid(),name}]);setShowProj(false);};
   const moveProject=(idx,dir)=>{const next=idx+dir;if(next<0||next>=projects.length)return;const arr=[...projects];[arr[idx],arr[next]]=[arr[next],arr[idx]];setProjects(arr);};
-  const priLabel={A:"A – Available",B:"B – Soon",C:"C – Someday"};const priCol={A:{bg:"#fde8e7",color:C.pa},B:{bg:"#fef3e2",color:C.pb},C:{bg:"#e8f4e6",color:C.pc}};
+  const priLabel={A:"Available",B:"Soon",C:"Someday"};const priCol={A:{bg:"#fde8e7",color:C.pa},B:{bg:"#fef3e2",color:C.pb},C:{bg:"#e8f4e6",color:C.pc}};
   const dragRef=useRef({idx:null,projId:null,pri:null});
   const todayDragRef=useRef({idx:null});
   const recurDragRef=useRef({idx:null});
@@ -423,10 +423,10 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
         const proj=projects.find(p=>p.id===t.projectId);
         if(proj?.parked)return false;
         if(t.onDeck)return true;
-        if(t.priority!=="A")return false;
+        const today=todayDS();const threeDays=new Date();threeDays.setDate(threeDays.getDate()+3);const threeDaysDS=toDS(threeDays.getFullYear(),threeDays.getMonth(),threeDays.getDate());if(t.priority!=="A"&&!(t.dueDate&&t.dueDate<=threeDaysDS))return false;
         if(t.projectId==="misc")return true;
         const projATasks=active.filter(x=>x.projectId===t.projectId&&x.priority==="A"&&!x.today&&!x.waiting);
-        return projATasks[0]?.id===t.id;
+        return projATasks[0]?.id===t.id||t.priority!=="A";
       });
       return onDeckTasks.length>0&&(
       <div style={{background:C.card,border:`1.5px solid ${C.pa}22`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
@@ -464,7 +464,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
         </div>
       </div>);
     })()}
-    {(()=>{const recurTasks=active.filter(t=>t.recur).slice().sort((a,b)=>{if(!a.dueDate&&!b.dueDate)return 0;if(!a.dueDate)return 1;if(!b.dueDate)return -1;return a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0;});if(!recurTasks.length)return null;const isOpen=!collapsed.__recur__;return(<div style={{background:C.card,border:`1px solid #c8d8b8`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
+    {(()=>{const recurTasks=active.filter(t=>t.recur).slice().sort((a,b)=>{if(!a.dueDate&&!b.dueDate)return 0;if(!a.dueDate)return -1;if(!b.dueDate)return 1;return a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0;});if(!recurTasks.length)return null;const isOpen=!collapsed.__recur__;return(<div style={{background:C.card,border:`1px solid #c8d8b8`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#e8f0e0",cursor:"pointer",userSelect:"none"}} onClick={()=>setCollapsed(c=>({...c,__recur__:!c.__recur__}))}>
         <span>🔁</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:"#2a4a28"}}>Recurring</span>
         <span style={{fontSize:".75rem",color:"#4a6a48"}}>{recurTasks.length} task{recurTasks.length!==1?"s":""}</span>
@@ -806,7 +806,8 @@ function App(){
     const h=new Date().getHours();setTab(((h>=9&&h<12)||(h>=12&&h<15)||(h>=17&&h<21))?"coach":"todo");setLoaded(true);
   })();},[]);
 
-  useEffect(()=>{if(!loaded)return;const today=todayDS();setTasks(prev=>{let changed=false;const updated=prev.map(t=>{if(t.dueDate===today&&!t.today&&!t.doneDate){changed=true;return{...t,today:true};}if(t.inProgress&&!t.doneDate&&!t.today&&t.progressedOn!==today){changed=true;return{...t,today:true};}if(t.completedOn&&t.completedOn!==today){changed=true;return{...t,today:undefined,completedOn:undefined,progressedOn:undefined};}return t;});return changed?updated:prev;});},[loaded]);
+  useEffect(()=>{if(!loaded)return;const today=todayDS();const threeDays=new Date();threeDays.setDate(threeDays.getDate()+3);const threeDaysStr=toDS(threeDays.getFullYear(),threeDays.getMonth(),threeDays.getDate());setTasks(prev=>{let changed=false;const updated=prev.map(t=>{// Auto-manage recurring task availability
+if(t.recur&&!t.doneDate){if(t.dueDate&&t.dueDate<=threeDaysStr&&t.priority!=="A"){changed=true;return{...t,priority:"A"};}if((!t.dueDate||t.dueDate>threeDaysStr)&&t.priority!=="B"){changed=true;return{...t,priority:"B"};}}return t;});const updated2=updated.map(t=>{if(t.dueDate===today&&!t.today&&!t.doneDate){changed=true;return{...t,today:true};}if(t.inProgress&&!t.doneDate&&!t.today&&t.progressedOn!==today){changed=true;return{...t,today:true};}if(t.completedOn&&t.completedOn!==today){changed=true;return{...t,today:undefined,completedOn:undefined,progressedOn:undefined};}return t;});return changed?updated2:prev;});},[loaded]);
 
   useEffect(()=>{if(loaded)storageSet(STORE_KEYS.mood,moodData);},[moodData,loaded]);
   useEffect(()=>{if(loaded)storageSet(STORE_KEYS.act,actData);},[actData,loaded]);
