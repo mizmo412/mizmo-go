@@ -464,7 +464,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
         </div>
       </div>);
     })()}
-    {(()=>{const recurTasks=active.filter(t=>t.recur);if(!recurTasks.length)return null;const isOpen=!collapsed.__recur__;return(<div style={{background:C.card,border:`1px solid #c8d8b8`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
+    {(()=>{const recurTasks=active.filter(t=>t.recur).slice().sort((a,b)=>{if(!a.dueDate&&!b.dueDate)return 0;if(!a.dueDate)return 1;if(!b.dueDate)return -1;return a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0;});if(!recurTasks.length)return null;const isOpen=!collapsed.__recur__;return(<div style={{background:C.card,border:`1px solid #c8d8b8`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#e8f0e0",cursor:"pointer",userSelect:"none"}} onClick={()=>setCollapsed(c=>({...c,__recur__:!c.__recur__}))}>
         <span>🔁</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:"#2a4a28"}}>Recurring</span>
         <span style={{fontSize:".75rem",color:"#4a6a48"}}>{recurTasks.length} task{recurTasks.length!==1?"s":""}</span>
@@ -479,7 +479,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
             if(r.startsWith("custom:")){
               const[,n,unit]=r.split(":");
               if(unit==="manual")return"Manual date";
-              return`Every ${n} ${unit}`;
+              const unitLabel={days:n==1?'Daily':`Every ${n} days`,weeks:n==1?'Weekly':n==2?'Every 2 wks':`Every ${n} wks`,months:n==1?'Monthly':`Every ${n} months`,years:n==1?'Yearly':`Every ${n} years`}[unit];return unitLabel||`Every ${n} ${unit}`;
             }
             return{daily:"Daily",weekly:"Weekly",biweekly:"Every 2 wks",monthly:"Monthly"}[r]||r;
           })(task.recur);
@@ -496,7 +496,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
                 {task.trivial&&<span style={{fontSize:".75rem"}} title="Trivial">🧹</span>}
                 <span style={{fontSize:".68rem",color:"#4a6a48",background:"#e8f0e0",borderRadius:10,padding:"1px 6px"}}>{recurLabel}</span>
                 {proj&&proj.id!=="misc"&&<span style={{fontSize:".66rem",color:C.text3,background:C.bg2,borderRadius:4,padding:"1px 6px",border:`1px solid ${C.border}`}}>{proj.name}</span>}
-                {task.dueDate&&<DueBadge dueDate={task.dueDate}/>}
+                {task.dueDate&&<DueBadge dueDate={task.dueDate} calculatedDate={task.calculatedDate}/>}
               </div>
             </div>
             {task.today?<span style={{flexShrink:0,padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:"#B8941F",border:`1px solid #B8941F`,borderRadius:8,background:C.td2}}>In Today</span>:<button onClick={()=>addToToday(task.id)} style={{flexShrink:0,padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:C.text3,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer"}}>+ Today</button>}
