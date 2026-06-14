@@ -89,7 +89,7 @@ const _storage = {
   delete: (key) => { localStorage.removeItem(key); return Promise.resolve({key, deleted: true}); }
 };
 Object.defineProperty(window, 'storage', { get: () => _storage, configurable: true });
-const STORE_KEYS={mood:"wh_mood_data_v6",act:"wh_act_data_v6",tasks:"wh_tasks_v6",projects:"wh_projects_v6",moodWords:"wh_mood_words_v6",actWords:"wh_act_words_v6",coachLogs:"wh_coach_logs_v6",seeded:"wh_seeded_v6"};
+const STORE_KEYS={mood:"wh_mood_data_v6",act:"wh_act_data_v6",tasks:"wh_tasks_v6",projects:"wh_projects_v6",moodWords:"wh_mood_words_v6",actWords:"wh_act_words_v6",coachLogs:"wh_coach_logs_v6",coachMemory:"wh_coach_memory_v6",seeded:"wh_seeded_v6"};
 
 async function storageGet(key,fallback){try{const r=await window.storage.get(key);return r?JSON.parse(r.value):fallback;}catch(e){return fallback;}}
 async function storageSet(key,val){try{await window.storage.set(key,JSON.stringify(val));}catch(e){}}
@@ -99,7 +99,9 @@ function setApiKey(key){localStorage.setItem("mizmo_api_key",key);}
 
 const COACH_SYS=`You are a warm, practical wellness coach inside Mizmo Go! Your user is Mizmo — 65, retired, Napa CA. Project-oriented brain; thrives on deadlines; procrastinates mundane tasks. Keep responses conversational, 2-5 sentences. Ask ONE question at a time when exploring procrastination.
 
-Key facts: thyroid med adjustment (fatigue, swollen ankles); sciatica both legs, chiro scheduled, PT stretches; morning trap = sitting with phone; motivated by real external deadlines not fake ones; fence project has hard deadlines; building this app (Mizmo Go!); plays pool league (8-ball Tues, 9-ball Thurs); has a dog.`;
+Key facts: thyroid med adjustment (fatigue, swollen ankles); sciatica both legs, chiro scheduled, PT stretches; morning trap = sitting with phone; motivated by real external deadlines not fake ones; fence project has hard deadlines; building this app (Mizmo Go!); plays pool league (8-ball Tues, 9-ball Thurs); has a dog.
+
+You have persistent memory. When Maureen says "save that", "remember that", "save it", "remind me", or similar — you will save a memory silently. When she says "forget that" you remove the last memory. When she asks "what do you remember" list your memories. You receive recent conversation history and memories in context — use them naturally without narrating that you're doing so. Notice patterns in when tasks get done (morning/afternoon/evening) and gently surface insights about procrastination when relevant.`
 
 function nextDueDate(recur){
   const d=new Date();
@@ -349,7 +351,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
   const _todayDone=tasks.filter(t=>t.completedOn===todayDS()&&t.doneDate);
   const todayTasks=[..._todayActive,..._todayProgressed,..._todayDone];
   const saveTask=data=>{const isToday=addingToToday;const updated=editTask?tasks.map(t=>t.id===editTask.id?{...t,...data}:t):[...tasks,{id:uid(),...data,addedDate:todayDS(),doneDate:data.doneDate||null,today:isToday?true:undefined}];setTasks(updated);setShowTask(false);setEditTask(null);setAddingTo(null);setAddingToToday(false);};
-  const completeTask=id=>{const task=tasks.find(t=>t.id===id);if(task?.inProgress){setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:todayDS(),completedOn:todayDS(),today:true}:x));}else{setTasks(prev=>{const updated=prev.map(x=>x.id===id?{...x,doneDate:task?.trivial?"trivial":todayDS(),completedOn:todayDS(),today:task?.trivial?x.today:undefined}:x);const origTask=prev.find(x=>x.id===id);if(origTask?.recur){const next={...origTask,id:uid(),doneDate:null,today:undefined,completedOn:undefined,inProgress:false,waiting:false,addedDate:todayDS(),dueDate:nextDueDate(origTask.recur),calculatedDate:true,priority:"B"};return[...updated,next];}return updated;});}};
+  const completeTask=id=>{const task=tasks.find(t=>t.id===id);if(task?.inProgress){setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:todayDS(),completedOn:todayDS(),today:true}:x));}else{setTasks(prev=>{const updated=prev.map(x=>x.id===id?{...x,doneDate:task?.trivial?"trivial":todayDS(),completedOn:todayDS(),completedTime:(()=>{const n=new Date();const h=n.getHours();return h<12?"morning":h<17?"afternoon":"evening";})(),today:task?.trivial?x.today:undefined}:x);const origTask=prev.find(x=>x.id===id);if(origTask?.recur){const next={...origTask,id:uid(),doneDate:null,today:undefined,completedOn:undefined,inProgress:false,waiting:false,addedDate:todayDS(),dueDate:nextDueDate(origTask.recur),calculatedDate:true,priority:"B"};return[...updated,next];}return updated;});}};
   const handleProgressLog=(id,note,complete)=>{setTasks(tasks.map(x=>{if(x.id!==id)return x;const newLog=[...(x.progressLog||[]),{date:todayDS(),note:note.trim()}];if(complete)return{...x,doneDate:todayDS(),completedOn:todayDS(),inProgress:undefined,progressLog:newLog};return{...x,progressLog:newLog};}));setProgressPrompt(null);};
   const removeFromToday=id=>{const task=tasks.find(t=>t.id===id);if(task?.recur){setTasks(prev=>prev.map(x=>x.id===id?{...x,today:undefined,dueDate:tomorrowDS()}:x));}else{setTasks(prev=>prev.map(x=>x.id===id?{...x,today:undefined}:x));}};
   const addToToday=id=>setTasks(tasks.map(x=>x.id===id?{...x,today:true,onDeck:undefined}:x));
@@ -638,7 +640,35 @@ function CheckInPanel({moodData,actData,tasks,coachLogs,dismissed,onDismiss,onSa
   const cfg=CI[type];const isEvening=type==="evening";
   const moodOpts=[{v:"good",em:"😊",lb:"Good"},{v:"okay",em:"😐",lb:"OK"},{v:"hard",em:"😔",lb:"Hard"}];const actOpts=[{v:"great",em:"💪",lb:"Great"},{v:"okay",em:"🚶",lb:"Okay"},{v:"skip",em:"🛋",lb:"Skipped"}];
   const saveToCalendars=(m,w,p)=>{if(m&&onSaveMood){const ex=moodData[todayKey]||{};onSaveMood(todayKey,{...ex,mood:m,words:w||[]});}if(isEvening&&p&&onSaveAct){const ex=actData[todayKey]||{};onSaveAct(todayKey,{...ex,phys:p});}};
-  const buildCtx=()=>{const recent=[];for(let i=0;i<5;i++){const d=new Date();d.setDate(d.getDate()-i);const k=toDS(d.getFullYear(),d.getMonth(),d.getDate());if(moodData[k]||actData[k])recent.push({date:k,mood:moodData[k]?.mood,phys:actData[k]?.phys});}const ts=tasks.filter(t=>!t.doneDate).slice(0,8).map(t=>`[${t.priority}${t.today?"★":""}${t.waiting?"⏳":""}] ${t.title}`);return`Recent: ${JSON.stringify(recent)}. Tasks: ${ts.join(", ")||"none"}.`;};
+  const buildCtx=()=>{
+    // Mood/activity last 5 days
+    const recent=[];for(let i=0;i<5;i++){const d=new Date();d.setDate(d.getDate()-i);const k=toDS(d.getFullYear(),d.getMonth(),d.getDate());if(moodData[k]||actData[k])recent.push({date:k,mood:moodData[k]?.mood,phys:actData[k]?.phys});}
+    // Active tasks
+    const ts=tasks.filter(t=>!t.doneDate).slice(0,12).map(t=>`[${t.priority}${t.today?"★":""}${t.inProgress?"🔄":""}${t.waiting?"⏳":""}] ${t.title}${t.dueDate?" (due:"+t.dueDate+")":""}`);
+    // Recent completions last 7 days
+    const sevenAgo=new Date();sevenAgo.setDate(sevenAgo.getDate()-7);const sevenAgoDS=toDS(sevenAgo.getFullYear(),sevenAgo.getMonth(),sevenAgo.getDate());
+    const done=tasks.filter(t=>t.doneDate&&t.doneDate>=sevenAgoDS).map(t=>`${t.title} (completed:${t.completedOn||t.doneDate}${t.completedTime?" at "+t.completedTime:""})`);
+    // Long-term memories
+    const mems=coachMemory?.insights?.length>0?"Memories about Maureen:
+"+coachMemory.insights.map((m,i)=>`${i+1}. ${m}`).join("
+"):"";
+    // Recent chat history (last 5 days, excluding today)
+    const recentChats=Object.entries(coachLogs||{}).filter(([dk,logs])=>dk!==todayDS()&&dk>=sevenAgoDS&&logs.some(l=>l.messages?.length>0)).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,5).map(([dk,logs])=>{const chatLog=logs.find(l=>l.type==="chat")||logs[0];const msgs=(chatLog?.messages||[]).filter(m=>m.content&&m.content!=="__pending__").slice(-6).map(m=>`${m.role==="user"?"Maureen":"Coach"}: ${m.content}`).join("
+");return msgs?`--- ${dk} ---
+${msgs}`:null;}).filter(Boolean).join("
+
+");
+    let ctx=`Recent mood/activity: ${JSON.stringify(recent)}.
+Active tasks: ${ts.join(", ")||"none"}.
+Completed last 7 days: ${done.join(", ")||"none"}.`;
+    if(mems)ctx+="
+
+"+mems;
+    if(recentChats)ctx+="
+
+Recent conversations:
+"+recentChats;
+    return ctx;};
   const send=async(msg)=>{
     const text=msg||reply.trim();if(!text||loading)return;setReply("");setLoading(true);setError("");setStarted(true);
     saveToCalendars(mood,words,phys);
@@ -646,7 +676,20 @@ function CheckInPanel({moodData,actData,tasks,coachLogs,dismissed,onDismiss,onSa
     const hashTasks=extractHashTasks(text);if(hashTasks.length&&setTasks){setTasks(prev=>[...prev,...hashTasks.map(title=>({id:uid(),title,priority:"A",projectId:"misc",addedDate:todayDS(),doneDate:null,today:true}))]);setTasksAdded(hashTasks);setTimeout(()=>setTasksAdded([]),4000);}
     const isFirst=chatHist.length===0;const moodCtx=mood?` Mood: ${mood}.`:"";const actCtx=isEvening&&phys?` Activity: ${phys}.`:"";
     const userMsg={role:"user",content:text};const apiMsg=isFirst?{role:"user",content:cfg.prompt(text+moodCtx+actCtx,buildCtx())}:userMsg;const displayHist=[...chatHist,userMsg];setChatHist(displayHist);
-    try{const r=await askCoach(isFirst?[apiMsg]:[...chatHist,userMsg],buildCtx());const updatedHist=[...displayHist,{role:"assistant",content:r}];setChatHist(updatedHist);if(onSaveLog)onSaveLog(todayDS(),type,updatedHist,{mood,words,phys});}
+    try{const r=await askCoach(isFirst?[apiMsg]:[...chatHist,userMsg],buildCtx());const updatedHist=[...displayHist,{role:"assistant",content:r}];setChatHist(updatedHist);if(onSaveLog)onSaveLog(todayDS(),type,updatedHist,{mood,words,phys});
+      // Memory trigger detection
+      const lowerText=text.toLowerCase();const memTrigger=lowerText.includes("save that")||lowerText.includes("save it")||lowerText.includes("remember that")||lowerText.includes("remind me")||lowerText.includes("remember this");
+      const forgetTrigger=lowerText.includes("forget that")||lowerText.startsWith("forget ");
+      const listTrigger=lowerText.includes("what do you remember")||lowerText.includes("what have you saved");
+      if(memTrigger){
+        // Ask Coach to extract the key insight
+        try{const memPrompt=`The user said "${text}" after this conversation. Extract ONE concise memory to save (max 20 words). Focus on preferences, boundaries, procrastination patterns, decisions, or things they want remembered. If it's just casual conversation not worth saving, respond with just "SKIP". Respond with only the memory text or SKIP.`;
+        const memR=await askCoach([{role:"user",content:memPrompt}],buildCtx());
+        if(memR&&!memR.includes("SKIP")&&memR.trim().length>5){const newMem=memR.trim();const updated={insights:[...(coachMemory?.insights||[]),newMem],lastUpdated:todayDS()};updateCoachMemory(updated);}}catch(e){}
+      } else if(forgetTrigger){
+        // Remove last memory
+        if(coachMemory?.insights?.length>0){const updated={...coachMemory,insights:coachMemory.insights.slice(0,-1)};updateCoachMemory(updated);}
+      }}
     catch(e){const offline=e.message.includes("429")||e.message.includes("Rate limit")||e.message.includes("Network")||e.message.includes("401");if(offline){const ph=[...displayHist,{role:"assistant",content:"__pending__",pendingAt:new Date().toISOString()}];setChatHist(ph);if(onSaveLog)onSaveLog(todayDS(),type,ph,{mood,words,phys});setError("Coach is unavailable — your thoughts are saved.");}else{setError(e.message);setChatHist(h=>[...h,{role:"assistant",content:"Sorry, had trouble responding. Try again."}]);}}
     setLoading(false);
   };
