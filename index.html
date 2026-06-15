@@ -640,7 +640,7 @@ const CI={
   evening:{emoji:"🌇",label:"Evening",title:"How did your day go?",placeholder:"Reflect on your day — use # to add tasks for tomorrow",bg:C.td2,border:C.td,showMood:true,prompt:(r,ctx)=>`Evening check-in. User said: "${r}". Respond warmly, acknowledge what they accomplished, offer one gentle reflection. Context: ${ctx}`},
 };
 
-function CheckInPanel({moodData,actData,tasks,coachLogs,dismissed,onDismiss,onSaveLog,setTasks,moodWords,onSaveMood,onSaveAct}){
+function CheckInPanel({moodData,actData,tasks,coachLogs,dismissed,onDismiss,onSaveLog,setTasks,moodWords,onSaveMood,onSaveAct,coachMemory,updateCoachMemory}){
   const type=getCheckInType();const todayKey=todayDS();const existingLog=(coachLogs[todayKey]||[]).find(l=>l.type===type);
   const [mood,setMood]=useState(existingLog?.mood||moodData[todayKey]?.mood||"");const [words,setWords]=useState(existingLog?.words||moodData[todayKey]?.words||[]);const [phys,setPhys]=useState(existingLog?.phys||actData[todayKey]?.phys||"");
   const [reply,setReply]=useState("");const [chatHist,setChatHist]=useState(existingLog?(existingLog.messages||[]).filter(m=>m.content!=="__pending__"):[]);const [loading,setLoading]=useState(false);const [error,setError]=useState("");const [started,setStarted]=useState(!!existingLog);const [tasksAdded,setTasksAdded]=useState([]);const msgsRef=useRef(null);
@@ -754,7 +754,7 @@ function CoachTab({moodData,actData,tasks,projects,setTasks,coachMemory,onUpdate
           {insight&&<div style={{fontFamily:"Georgia,serif",fontSize:".95rem",fontStyle:"italic",lineHeight:1.72,color:C.text}}>{insight}</div>}
         </div>}
       </div>
-      {type&&<div style={{marginBottom:16}}><CheckInPanel moodData={moodData} actData={actData} tasks={tasks} coachLogs={coachLogs} dismissed={checkInDismissed} onDismiss={onDismissCheckIn} onSaveLog={onSaveLog} setTasks={setTasks} moodWords={moodWords} onSaveMood={onSaveMood} onSaveAct={onSaveAct}/></div>}
+      {type&&<div style={{marginBottom:16}}><CheckInPanel moodData={moodData} actData={actData} tasks={tasks} coachLogs={coachLogs} dismissed={checkInDismissed} onDismiss={onDismissCheckIn} onSaveLog={onSaveLog} setTasks={setTasks} moodWords={moodWords} onSaveMood={onSaveMood} onSaveAct={onSaveAct} coachMemory={coachMemory} updateCoachMemory={onUpdateMemory}/></div>}
     </>);})()}
     {(coachLogs[todayDS()]||[]).filter(l=>["morning","midday","evening"].includes(l.type)&&l.type!==getCheckInType()&&l.messages?.filter(m=>m.content!=="__pending__").length>0).map((log,i)=>{const cfg2=CI[log.type]||{};return <CoachLogAddon key={i} log={log} dateKey={todayDS()} onSaveLog={onSaveLog} setTasks={setTasks} customLabel={`${cfg2.emoji||""} ${cfg2.label||log.type}`}/>;})}
     {error&&<div style={{background:"#fde8e7",border:`1px solid ${C.pa}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:".83rem",color:C.pa,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span>⚠️ {error}</span><button onClick={()=>setError("")} style={{background:"none",border:"none",cursor:"pointer",color:C.pa,fontWeight:700,fontSize:".8rem"}}>▴ dismiss</button></div>}
