@@ -262,8 +262,8 @@ function TaskModal({task,projects,defaultProjectId,onSave,onClose,onRemoveToday,
     <FormRow label="When"><select style={S.select} value={pri} onChange={e=>setPri(e.target.value)}><option value="A">Available</option><option value="B">Soon</option><option value="C">Someday</option></select></FormRow>
     <FormRow label="Status">
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!waiting} onChange={e=>{setWaiting(e.target.checked);if(e.target.checked)setInProgress(false);}} style={{width:16,height:16}}/><span>⏳ Waiting</span></label>
-        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!inProgress} onChange={e=>{setInProgress(e.target.checked);if(e.target.checked)setWaiting(false);}} style={{width:16,height:16}}/><span>🔄 In Progress</span></label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!waiting} onChange={e=>setWaiting(e.target.checked)} style={{width:16,height:16}}/><span>⏳ Waiting</span></label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!inProgress} onChange={e=>setInProgress(e.target.checked)} style={{width:16,height:16}}/><span>🔄 In Progress</span></label>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!trivial} onChange={e=>setTrivial(e.target.checked)} style={{width:16,height:16}}/><span title="Complete silently">🧹 Trivial</span></label>
         {task&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={markComplete} onChange={e=>{setMarkComplete(e.target.checked);if(e.target.checked){setInProgress(false);setWaiting(false);}}} style={{width:16,height:16}}/><span>✅ Complete</span></label>}
       </div>
@@ -353,7 +353,7 @@ function TodoTab({tasks,projects,setTasks,setProjects}){
   const saveTask=data=>{const isToday=addingToToday;const compTime=(()=>{const n=new Date();const h=n.getHours();return h<12?"morning":h<17?"afternoon":"evening";})();setTasks(prev=>{const updated=editTask?prev.map(t=>t.id===editTask.id?{...t,...data,completedTime:data.doneDate?compTime:t.completedTime}:t):[...prev,{id:uid(),...data,addedDate:todayDS(),doneDate:data.doneDate||null,today:isToday?true:undefined}];// If completing a recurring task, create next instance
 if(editTask&&data.doneDate&&editTask.recur){const nd=nextDueDate(editTask.recur);const next={...editTask,...data,id:uid(),doneDate:null,today:undefined,completedOn:undefined,inProgress:false,waiting:false,addedDate:todayDS(),dueDate:nd,calculatedDate:true,priority:"B"};return[...updated,next];}return updated;});setShowTask(false);setEditTask(null);setAddingTo(null);setAddingToToday(false);};
   const completeTask=id=>{const task=tasks.find(t=>t.id===id);if(task?.inProgress){if(task.progressedOn===todayDS()){// Toggle off — uncheck progress for today
-setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:undefined}:x));return;}setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:todayDS(),completedOn:todayDS(),today:true}:x));return;}else{setTasks(prev=>{const updated=prev.map(x=>x.id===id?{...x,doneDate:task?.trivial?"trivial":todayDS(),completedOn:todayDS(),completedTime:(()=>{const n=new Date();const h=n.getHours();return h<12?"morning":h<17?"afternoon":"evening";})(),today:task?.trivial?x.today:undefined}:x);const origTask=prev.find(x=>x.id===id);if(origTask?.recur){const nd=nextDueDate(origTask.recur);const next={...origTask,id:uid(),doneDate:null,today:undefined,completedOn:undefined,inProgress:false,waiting:false,addedDate:todayDS(),dueDate:nd,calculatedDate:true,priority:"B"};return[...updated,next];}return updated;});}};
+setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:undefined}:x));return;}setProgressPrompt(task);return;}else{setTasks(prev=>{const updated=prev.map(x=>x.id===id?{...x,doneDate:task?.trivial?"trivial":todayDS(),completedOn:todayDS(),completedTime:(()=>{const n=new Date();const h=n.getHours();return h<12?"morning":h<17?"afternoon":"evening";})(),today:task?.trivial?x.today:undefined}:x);const origTask=prev.find(x=>x.id===id);if(origTask?.recur){const nd=nextDueDate(origTask.recur);const next={...origTask,id:uid(),doneDate:null,today:undefined,completedOn:undefined,inProgress:false,waiting:false,addedDate:todayDS(),dueDate:nd,calculatedDate:true,priority:"B"};return[...updated,next];}return updated;});}};
   const handleProgressLog=(id,note,complete,followUpDate)=>{const compTime=(()=>{const n=new Date();const h=n.getHours();return h<12?"morning":h<17?"afternoon":"evening";})();setTasks(prev=>prev.map(x=>{if(x.id!==id)return x;const newLog=[...(x.progressLog||[]),{date:todayDS(),note:note.trim()}];if(complete){const origTask=prev.find(t=>t.id===id);if(origTask?.recur){const nd=nextDueDate(origTask.recur);const next={...origTask,id:uid(),doneDate:null,today:undefined,completedOn:undefined,inProgress:false,waiting:false,addedDate:todayDS(),dueDate:nd,calculatedDate:true,priority:"B"};return{...x,doneDate:todayDS(),completedOn:todayDS(),completedTime:compTime,inProgress:undefined,progressLog:newLog};}return{...x,doneDate:todayDS(),completedOn:todayDS(),completedTime:compTime,inProgress:undefined,progressLog:newLog};}if(followUpDate){return{...x,progressLog:newLog,dueDate:followUpDate,waiting:true,today:true};}return{...x,progressLog:newLog,today:true};}));setProgressPrompt(null);};
   const removeFromToday=id=>{const task=tasks.find(t=>t.id===id);if(task?.recur){setTasks(prev=>prev.map(x=>x.id===id?{...x,today:undefined,dueDate:tomorrowDS()}:x));}else{setTasks(prev=>prev.map(x=>x.id===id?{...x,today:undefined}:x));}};
   const addToToday=id=>setTasks(tasks.map(x=>x.id===id?{...x,today:true,onDeck:undefined}:x));
@@ -423,7 +423,8 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
     </div>
     {(()=>{
       const onDeckTasks=active.filter(t=>{
-        if(t.today||t.waiting||t.doneDate||t.recur)return false;
+        if(t.today||t.doneDate||t.recur)return false;
+        if(t.waiting&&!t.onDeck)return false;
         const proj=projects.find(p=>p.id===t.projectId);
         if(proj?.parked)return false;
         if(t.onDeck)return true;
@@ -549,7 +550,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
           {pt.length===0&&!proj.completed&&<div style={{color:C.text3,fontSize:".83rem",padding:"4px 0"}}>No tasks yet.</div>}
           {proj.completed&&pt.length===0&&<div style={{color:C.text3,fontSize:".83rem",padding:"4px 0",fontStyle:"italic"}}>All tasks completed.</div>}
           {["A","B","C"].map(pri=>{
-            const priTasks=pt.filter(t=>t.priority===pri&&!t.recur);
+            const priTasks=pt.filter(t=>t.priority===pri&&!t.recur).slice().sort((a,b)=>{const aHas=!!a.dueDate,bHas=!!b.dueDate;if(aHas&&!bHas)return-1;if(!aHas&&bHas)return 1;if(aHas&&bHas&&a.dueDate!==b.dueDate)return a.dueDate<b.dueDate?-1:1;if(a.inProgress&&!b.inProgress)return-1;if(!a.inProgress&&b.inProgress)return 1;return 0;});
             if(!priTasks.length)return null;
             const pc=priCol[pri];const isSub=pri==="B"||pri==="C";
             const _projPriKey=proj.id+pri; // drag uses dragRef
@@ -846,7 +847,8 @@ function App(){
   })();},[]);
 
   useEffect(()=>{if(!loaded)return;const today=todayDS();const threeDays=new Date();threeDays.setDate(threeDays.getDate()+3);const threeDaysStr=toDS(threeDays.getFullYear(),threeDays.getMonth(),threeDays.getDate());setTasks(prev=>{let changed=false;const updated=prev.map(t=>{// Auto-manage recurring task availability
-if(t.recur&&!t.doneDate){if(t.dueDate&&t.dueDate<=threeDaysStr&&t.priority!=="A"){changed=true;return{...t,priority:"A"};}if((!t.dueDate||t.dueDate>threeDaysStr)&&t.priority!=="B"){changed=true;return{...t,priority:"B"};}}return t;});const updated2=updated.map(t=>{if(t.dueDate===today&&!t.today&&!t.doneDate){changed=true;return{...t,today:true};}if(t.inProgress&&!t.doneDate&&!t.today&&t.progressedOn===today){changed=true;return{...t,today:true};}if(t.completedOn&&t.completedOn!==today){changed=true;return{...t,today:undefined,completedOn:undefined,progressedOn:undefined};}return t;});return changed?updated2:prev;});},[loaded]);
+if(t.recur&&!t.doneDate){if(t.dueDate&&t.dueDate<=threeDaysStr&&t.priority!=="A"){changed=true;return{...t,priority:"A"};}if((!t.dueDate||t.dueDate>threeDaysStr)&&t.priority!=="B"){changed=true;return{...t,priority:"B"};}}return t;});const updated2=updated.map(t=>{if(t.dueDate===today&&!t.today&&!t.doneDate){changed=true;return{...t,today:true};}if(t.inProgress&&!t.doneDate&&!t.today&&t.progressedOn===today){changed=true;return{...t,today:true};}if(t.completedOn&&t.completedOn!==today){changed=true;return{...t,today:undefined,completedOn:undefined,progressedOn:undefined};}// Waiting tasks due within 3 days resurface on On Deck
+if(t.waiting&&!t.doneDate&&t.dueDate&&t.dueDate<=threeDaysStr&&!t.onDeck){changed=true;return{...t,onDeck:true};}return t;});return changed?updated2:prev;});},[loaded]);
 
   useEffect(()=>{if(loaded)storageSet(STORE_KEYS.mood,moodData);},[moodData,loaded]);
   useEffect(()=>{if(loaded)storageSet(STORE_KEYS.act,actData);},[actData,loaded]);
