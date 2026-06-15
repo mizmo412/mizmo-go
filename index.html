@@ -332,7 +332,7 @@ function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday}){
         {task.inProgress&&!task.waiting&&<span style={{fontSize:".78rem"}}>🔄</span>}
         {task.waiting&&<span style={{fontSize:".78rem"}}>⏳</span>}
         {proj&&proj.id!=="misc"&&<span style={{padding:"1px 6px",fontSize:".66rem",background:C.bg2,color:C.text3,borderRadius:4,border:`1px solid ${C.border}`}}>{proj.name}</span>}
-        {task.dueDate&&<DueBadge dueDate={task.dueDate}/>}
+        {task.dueDate&&!task.doneDate&&!task.progressedOn&&<DueBadge dueDate={task.dueDate}/>}
       </div>
       {task.notes&&<div style={{fontSize:".77rem",color:C.text3,marginTop:1}}>{task.notes}</div>}
     </div>
