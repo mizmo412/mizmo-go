@@ -649,25 +649,12 @@ function CheckInPanel({moodData,actData,tasks,coachLogs,dismissed,onDismiss,onSa
     const sevenAgo=new Date();sevenAgo.setDate(sevenAgo.getDate()-7);const sevenAgoDS=toDS(sevenAgo.getFullYear(),sevenAgo.getMonth(),sevenAgo.getDate());
     const done=tasks.filter(t=>t.doneDate&&t.doneDate>=sevenAgoDS).map(t=>`${t.title} (completed:${t.completedOn||t.doneDate}${t.completedTime?" at "+t.completedTime:""})`);
     // Long-term memories
-    const mems=coachMemory?.insights?.length>0?"Memories about Maureen:
-"+coachMemory.insights.map((m,i)=>`${i+1}. ${m}`).join("
-"):"";
+    const mems=coachMemory?.insights?.length>0?"Memories about Maureen:\n"+coachMemory.insights.map((m,i)=>(i+1)+". "+m).join("\n"):"";
     // Recent chat history (last 5 days, excluding today)
-    const recentChats=Object.entries(coachLogs||{}).filter(([dk,logs])=>dk!==todayDS()&&dk>=sevenAgoDS&&logs.some(l=>l.messages?.length>0)).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,5).map(([dk,logs])=>{const chatLog=logs.find(l=>l.type==="chat")||logs[0];const msgs=(chatLog?.messages||[]).filter(m=>m.content&&m.content!=="__pending__").slice(-6).map(m=>`${m.role==="user"?"Maureen":"Coach"}: ${m.content}`).join("
-");return msgs?`--- ${dk} ---
-${msgs}`:null;}).filter(Boolean).join("
-
-");
-    let ctx=`Recent mood/activity: ${JSON.stringify(recent)}.
-Active tasks: ${ts.join(", ")||"none"}.
-Completed last 7 days: ${done.join(", ")||"none"}.`;
-    if(mems)ctx+="
-
-"+mems;
-    if(recentChats)ctx+="
-
-Recent conversations:
-"+recentChats;
+    const recentChats=Object.entries(coachLogs||{}).filter(([dk,logs])=>dk!==todayDS()&&dk>=sevenAgoDS&&logs.some(l=>l.messages?.length>0)).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,5).map(([dk,logs])=>{const chatLog=logs.find(l=>l.type==="chat")||logs[0];const msgs=(chatLog?.messages||[]).filter(m=>m.content&&m.content!=="__pending__").slice(-6).map(m=>(m.role==="user"?"Maureen":"Coach")+": "+m.content).join("\n");return msgs?("--- "+dk+" ---\n"+msgs):null;}).filter(Boolean).join("\n\n");
+    let ctx="Recent mood/activity: "+JSON.stringify(recent)+".\nActive tasks: "+(ts.join(", ")||"none")+".\nCompleted last 7 days: "+(done.join(", ")||"none")+".";
+    if(mems)ctx+="\n\n"+mems;
+    if(recentChats)ctx+="\n\nRecent conversations:\n"+recentChats;
     return ctx;};
   const send=async(msg)=>{
     const text=msg||reply.trim();if(!text||loading)return;setReply("");setLoading(true);setError("");setStarted(true);
