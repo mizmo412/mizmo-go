@@ -338,7 +338,7 @@ function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday}){
         
         {task.inProgress&&!task.waiting&&<span style={{fontSize:".78rem"}}>🔄</span>}
         {task.waiting&&<span style={{fontSize:".78rem"}}>⏳</span>}
-        {task.recur?<span style={{padding:"1px 6px",fontSize:".66rem",background:"#e8f0e0",color:"#2a4a28",borderRadius:4,border:"1px solid #c8d8b8"}}>🔁 Recurring</span>:proj&&proj.id!=="misc"&&<span style={{padding:"1px 6px",fontSize:".66rem",background:C.bg2,color:C.text3,borderRadius:4,border:`1px solid ${C.border}`}}>{proj.name}</span>}
+        {task.recur?<span style={{padding:"1px 6px",fontSize:".66rem",background:C.bg2,color:C.text3,borderRadius:4,border:`1px solid ${C.border}`}}>🔁 Recurring</span>:proj&&proj.id!=="misc"&&<span style={{padding:"1px 6px",fontSize:".66rem",background:C.bg2,color:C.text3,borderRadius:4,border:`1px solid ${C.border}`}}>{proj.name}</span>}
         {task.dueDate&&!task.doneDate&&!task.progressedOn&&<DueBadge dueDate={task.dueDate}/>}
       </div>
       {task.notes&&<div style={{fontSize:".77rem",color:C.text3,marginTop:1}}>{task.notes}</div>}
@@ -443,7 +443,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
       return onDeckTasks.length>0&&(
       <div style={{background:C.card,border:`1.5px solid ${C.pa}22`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:"#fde8e7"}}>
-          <span style={{fontWeight:700,fontSize:".8rem",color:C.pa}}>A</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:C.pa}}>On Deck</span>
+          <span style={{fontWeight:600,fontSize:".9rem",flex:1,color:C.pa}}>On Deck</span>
         </div>
         <div style={{padding:"4px 10px 8px"}}>
           {(()=>{
@@ -453,7 +453,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
             const upcoming=onDeckTasks.filter(t=>t.dueDate&&t.dueDate>=today&&t.dueDate<=tenDayStr).slice().sort((a,b)=>a.dueDate<b.dueDate?-1:1);
             if(!upcoming.length)return null;
             return(<div style={{marginBottom:8}}>
-              <div style={{fontSize:".72rem",fontWeight:700,color:"#8a5c00",background:"#fef3c7",border:"1px solid #d4a820",borderRadius:8,padding:"2px 10px",marginBottom:4,display:"inline-block"}}>Coming Up</div>
+              <div style={{fontSize:".72rem",fontWeight:700,color:"#8a5c00",background:"#fef3c7",border:"1px solid #d4a820",borderRadius:8,padding:"2px 10px",marginBottom:4,display:"none"}}>Coming Up</div>
               {upcoming.map(task=>(
                 <div key={task.id} style={{display:"flex",alignItems:"flex-start",gap:4}}>
                   <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
