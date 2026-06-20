@@ -162,7 +162,7 @@ function MoodCalendar({moodData,tasks,coachLogs,onDayClick}){
   const jumpTo=dateStr=>{const[y,m]=dateStr.split("-");setCal({y:parseInt(y),m:parseInt(m)-1});setSearch("");setSearchResults([]);onDayClick(dateStr);};
   const nav=d=>setCal(c=>{let m=c.m+d,y=c.y;if(m<0){m=11;y--;}if(m>11){m=0;y++;}return{y,m};});
   const firstDay=new Date(cal.y,cal.m,1).getDay();const dim=new Date(cal.y,cal.m+1,0).getDate();const todS=todayDS();
-  let good=0,okay=0,hard=0;
+  let great=0,good=0,okay=0,hard=0;
   for(let d=1;d<=dim;d++){const e=moodData[toDS(cal.y,cal.m,d)];if(e){if(e.mood==="great")great++;else if(e.mood==="good")good++;else if(e.mood==="okay")okay++;else hard++;}}
   const mCol={great:{bg:C.mgr2,border:C.mgr},good:{bg:C.mg2,border:C.mg},okay:{bg:C.mo2,border:C.mo},hard:{bg:C.mh2,border:C.mh}};
   const mEm={great:"😊",good:"🙂",okay:"😐",hard:"😩"};
