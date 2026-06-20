@@ -430,7 +430,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
     </div>
     {(()=>{
       const onDeckTasks=active.filter(t=>{
-        if(t.today||t.doneDate||t.recur)return false;
+        if(t.today||t.doneDate)return false;
         if(t.waiting&&!t.onDeck)return false;
         const proj=projects.find(p=>p.id===t.projectId);
         if(proj?.parked)return false;
