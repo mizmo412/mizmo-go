@@ -568,12 +568,16 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
     {(()=>{
       const completedProjs=projects.filter(p=>p.completed);
       if(!completedProjs.length)return null;
+      const compOpen=!collapsed.__completedProjs__;
       return(<div style={{background:C.card,border:`1px solid #c8d8b8`,borderRadius:12,marginTop:8,overflow:"hidden"}}>
-        <div style={{padding:"7px 12px",background:"#e8f4e6",fontFamily:"Georgia,serif",fontWeight:600,fontSize:".9rem",color:"#2a4a28"}}>✅ Completed Projects</div>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#e8f4e6",cursor:"pointer",userSelect:"none"}} onClick={()=>setCollapsed(c=>({...c,__completedProjs__:!c.__completedProjs__}))}>
+          <span style={{fontFamily:"Georgia,serif",fontWeight:600,fontSize:".9rem",color:"#2a4a28",flex:1}}>✅ Completed Projects</span>
+          <span style={{fontSize:".75rem",color:"#4a6a48"}}>{completedProjs.length} project{completedProjs.length!==1?"s":""}</span>
+          <span style={{color:"#4a6a48",marginLeft:4,transform:compOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span>
+        </div>
+        {compOpen&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
           <thead><tr>
             <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Project</th>
-            <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Completed</th>
             <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Done On</th>
             <th style={{padding:"5px 12px",borderBottom:`1px solid #c8d8b8`}}></th>
           </tr></thead>
@@ -586,7 +590,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
               </td>
             </tr>
           ))}</tbody>
-        </table>
+        </table>}
       </div>);
     })()}
     {confirm&&<Confirm title={confirm.type==="project"?"Delete Project?":"Delete Task?"} body={`Delete "${confirm.name}"?${confirm.type==="project"?" All tasks inside will also be deleted.":""}`} onOk={doDelete} onCancel={()=>setConfirm(null)}/>}
