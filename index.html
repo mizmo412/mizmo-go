@@ -438,7 +438,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
         const today=todayDS();const threeDays=new Date();threeDays.setDate(threeDays.getDate()+3);const threeDaysDS=toDS(threeDays.getFullYear(),threeDays.getMonth(),threeDays.getDate());if(t.priority!=="A"&&!(t.dueDate&&t.dueDate<=threeDaysDS))return false;
         if(t.projectId==="misc")return true;
         const projATasks=active.filter(x=>x.projectId===t.projectId&&x.priority==="A"&&!x.today&&!x.waiting);
-        return projATasks[0]?.id===t.id||t.priority!=="A";
+        return projATasks[0]?.id===t.id;
       });
       return onDeckTasks.length>0&&(
       <div style={{background:C.card,border:`1.5px solid ${C.pa}22`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
@@ -458,6 +458,20 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
         </div>
       </div>);
     })()}
+    {(()=>{const wt=active.filter(t=>t.waiting);if(!wt.length)return null;return(<div style={{background:C.card,border:`1px solid #b8c8e0`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#e8f0f8",cursor:"pointer"}} onClick={()=>setCollapsed(c=>({...c,__waiting__:!c.__waiting__}))}>
+        <span>⏳</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:"#2a4a68"}}>Waiting</span>
+        <span style={{fontSize:".7rem",color:"#4a6a88",fontStyle:"italic",marginRight:6}}>external only</span>
+        <span style={{fontSize:".75rem",color:"#4a6a88"}}>{wt.length} blocked</span><span style={{color:"#9b7bcc",marginLeft:4}}>▾</span>
+      </div>
+      {!collapsed.__waiting__&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
+        <tbody>{wt.map((task,wi)=>{const p=projects.find(x=>x.id===task.projectId);return <tr key={task.id} draggable
+            onDragStart={()=>{waitDragRef.current={idx:wi};}}
+            onDragOver={e=>{e.preventDefault();const r=waitDragRef.current;if(r.idx===null||r.idx===wi)return;const arr=[...wt];const[m]=arr.splice(r.idx,1);arr.splice(wi,0,m);waitDragRef.current.idx=wi;reorderWaiting(arr);}}
+            onDragEnd={()=>{waitDragRef.current={idx:null};}}
+            style={{cursor:"grab"}}><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`}}><span style={{cursor:"pointer",textDecoration:"underline dotted"}} onClick={()=>{setEditTask(task);setShowTask(true);}}>⏳ {task.title}</span>{task.waitingOn&&<div style={{fontSize:".72rem",color:"#4a6a88",marginTop:1}}>↳ {task.waitingOn}</div>}</td><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`,color:"#4a6a88",fontSize:".78rem"}}>{p?.name||"Misc"}</td></tr>;})}</tbody>
+      </table>}
+    </div>);})()}
     {(()=>{const recurTasks=active.filter(t=>t.recur).slice().sort((a,b)=>{
   if(!a.dueDate&&!b.dueDate)return 0;
   if(!a.dueDate)return -1;
@@ -506,20 +520,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
         })}
       </div>}
     </div>);})()}
-    {(()=>{const wt=active.filter(t=>t.waiting);if(!wt.length)return null;return(<div style={{background:C.card,border:`1px solid #b8c8e0`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#e8f0f8",cursor:"pointer"}} onClick={()=>setCollapsed(c=>({...c,__waiting__:!c.__waiting__}))}>
-        <span>⏳</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:"#2a4a68"}}>Waiting</span>
-        <span style={{fontSize:".7rem",color:"#4a6a88",fontStyle:"italic",marginRight:6}}>external only</span>
-        <span style={{fontSize:".75rem",color:"#4a6a88"}}>{wt.length} blocked</span><span style={{color:"#9b7bcc",marginLeft:4}}>▾</span>
-      </div>
-      {!collapsed.__waiting__&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
-        <tbody>{wt.map((task,wi)=>{const p=projects.find(x=>x.id===task.projectId);return <tr key={task.id} draggable
-            onDragStart={()=>{waitDragRef.current={idx:wi};}}
-            onDragOver={e=>{e.preventDefault();const r=waitDragRef.current;if(r.idx===null||r.idx===wi)return;const arr=[...wt];const[m]=arr.splice(r.idx,1);arr.splice(wi,0,m);waitDragRef.current.idx=wi;reorderWaiting(arr);}}
-            onDragEnd={()=>{waitDragRef.current={idx:null};}}
-            style={{cursor:"grab"}}><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`}}><span style={{cursor:"pointer",textDecoration:"underline dotted"}} onClick={()=>{setEditTask(task);setShowTask(true);}}>⏳ {task.title}</span>{task.waitingOn&&<div style={{fontSize:".72rem",color:"#4a6a88",marginTop:1}}>↳ {task.waitingOn}</div>}</td><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`,color:"#4a6a88",fontSize:".78rem"}}>{p?.name||"Misc"}</td></tr>;})}</tbody>
-      </table>}
-    </div>);})()}
+
     <div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600,marginBottom:10,color:C.text2}}>Projects</div>
     {[...[...projects].filter(p=>!p.completed).sort((a,b)=>0)].map((proj,idx)=>{
 
