@@ -324,7 +324,7 @@ function TaskRow({task,onComplete,onEdit,dragHandleProps,onSnooze,isParked}){
         {isStale(task)&&!isParked&&<span onClick={e=>{e.stopPropagation();onSnooze&&onSnooze(task.id);}} style={{fontSize:".75rem",cursor:"pointer",userSelect:"none"}} title="Snooze for 10 days">💤</span>}
         {task.dueDate&&<DueBadge dueDate={task.dueDate} calculatedDate={task.calculatedDate}/>}
       </div>
-      {task.notes&&!task.waitingOn&&!task.inProgress&&<div style={{fontSize:".77rem",color:C.text3,marginTop:1}}>{task.notes}</div>}
+      {task.notes&&!task.waitingOn&&!task.inProgress&&<div style={{fontSize:".77rem",color:C.text3,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.notes}</div>}
     </div>
   </div>);
 }
@@ -438,6 +438,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
         const proj=projects.find(p=>p.id===t.projectId);
         if(proj?.parked)return false;
         if(t.onDeck)return true;
+        if(t.recur&&!t.dueDate&&!t.completedOn)return true;
         const today=todayDS();const threeDays=new Date();threeDays.setDate(threeDays.getDate()+3);const threeDaysDS=toDS(threeDays.getFullYear(),threeDays.getMonth(),threeDays.getDate());if(t.priority!=="A"&&!(t.dueDate&&t.dueDate<=threeDaysDS))return false;
         if(t.projectId==="misc")return true;
         const projATasks=active.filter(x=>x.projectId===t.projectId&&x.priority==="A"&&!x.today&&!x.waiting);
@@ -458,6 +459,23 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
               </div>
             </div>
           ))}
+        {(()=>{
+          const soonNoDates=active.filter(t=>t.priority==="B"&&!t.dueDate&&!t.today&&!t.doneDate&&!t.recur&&!t.waiting&&!projects.find(p=>p.id===t.projectId)?.parked);
+          if(!soonNoDates.length)return null;
+          const soonOpen=collapsed.__soonNoDate__===true;
+          return(<div style={{borderTop:`1px solid ${C.pa}22`,marginTop:4}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",cursor:"pointer",userSelect:"none"}} onClick={()=>setCollapsed(c=>({...c,__soonNoDate__:!c.__soonNoDate__}))}>
+              <span style={{fontSize:".78rem",color:C.pb,fontWeight:600,flex:1}}>Soon — No Date ({soonNoDates.length})</span>
+              <span style={{fontSize:".7rem",color:C.text3,transform:soonOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span>
+            </div>
+            {soonOpen&&<div style={{padding:"2px 10px 8px"}}>
+              {soonNoDates.map(t=>{const proj=projects.find(p=>p.id===t.projectId);return(<div key={t.id} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 0"}}>
+                <div style={{flex:1,fontSize:".83rem",color:C.text,cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:2}} onClick={()=>{setEditTask(t);setShowTask(true);}}>{t.title}{proj&&proj.id!=="misc"&&<span style={{fontSize:".72rem",color:C.text3,marginLeft:6}}>{proj.name}</span>}</div>
+                <button onClick={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,priority:"A"}:x))} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:C.pa,border:`1px solid ${C.pa}`,borderRadius:8,background:"#fde8e7",cursor:"pointer",flexShrink:0}}>→ Avail</button>
+              </div>);})}
+            </div>}
+          </div>);
+        })()}
         </div>
       </div>);
     })()}
@@ -564,6 +582,24 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
               ))}
             </div>;
           })}
+        {isOpen&&(()=>{
+          const recurProjTasks=pt.filter(t=>t.recur&&!t.doneDate);
+          if(!recurProjTasks.length)return null;
+          const recurKey=proj.id+"__recur__";
+          const recurOpen=collapsed[recurKey]===true;
+          return(<div style={{borderTop:`1px solid ${C.border}`,marginTop:4}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",cursor:"pointer",userSelect:"none"}} onClick={()=>setCollapsed(c=>({...c,[recurKey]:!c[recurKey]}))}>
+              <span style={{fontSize:".72rem",color:C.text3,flex:1,fontStyle:"italic"}}>🔁 Recurring ({recurProjTasks.length})</span>
+              <span style={{fontSize:".7rem",color:C.text3,transform:recurOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span>
+            </div>
+            {recurOpen&&<div style={{padding:"2px 10px 6px"}}>
+              {recurProjTasks.map(t=><div key={t.id} style={{fontSize:".82rem",color:C.text2,padding:"3px 0",display:"flex",alignItems:"center",gap:6,cursor:"pointer"}} onClick={()=>{setEditTask(t);setShowTask(true);}}>
+                <span style={{textDecoration:"underline dotted",textUnderlineOffset:2}}>{t.title}</span>
+                {t.dueDate&&<DueBadge dueDate={t.dueDate} calculatedDate={t.calculatedDate}/>}
+              </div>)}
+            </div>}
+          </div>);
+        })()}
         </div>}
       </div>);
     })}
