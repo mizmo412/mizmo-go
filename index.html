@@ -32,6 +32,65 @@ const DOWS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const uid=()=>Math.random().toString(36).slice(2,9);
 const isAllCaps=t=>t.title&&t.title===t.title.toUpperCase()&&t.title.replace(/[^a-zA-Z]/g,"").length>0;
 const capsSort=(a,b)=>{const ac=isAllCaps(a),bc=isAllCaps(b);if(ac&&!bc)return -1;if(!ac&&bc)return 1;return 0;};
+
+// Touch-friendly drag reorder hook
+function useTouchReorder(items, onReorder) {
+  const dragIdx = useRef(null);
+  const rowRefs = useRef([]);
+  const ghostRef = useRef(null);
+  const startY = useRef(0);
+  const currentArr = useRef([...items]);
+
+  useEffect(() => { currentArr.current = [...items]; }, [items]);
+
+  const onTouchStart = (idx) => (e) => {
+    e.stopPropagation();
+    dragIdx.current = idx;
+    startY.current = e.touches[0].clientY;
+    // Create ghost element
+    const row = rowRefs.current[idx];
+    if (!row) return;
+    const ghost = row.cloneNode(true);
+    ghost.style.cssText = `position:fixed;left:${row.getBoundingClientRect().left}px;top:${row.getBoundingClientRect().top}px;width:${row.offsetWidth}px;opacity:0.7;background:#fff;boxShadow:0 4px 12px rgba(0,0,0,.15);borderRadius:8px;zIndex:9999;pointerEvents:none;`;
+    document.body.appendChild(ghost);
+    ghostRef.current = ghost;
+    row.style.opacity = '0.3';
+  };
+
+  const onTouchMove = (e) => {
+    if (dragIdx.current === null || !ghostRef.current) return;
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    ghostRef.current.style.top = (parseFloat(ghostRef.current.style.top) + y - startY.current) + 'px';
+    startY.current = y;
+    // Find which row we're over
+    const rows = rowRefs.current;
+    for (let i = 0; i < rows.length; i++) {
+      if (!rows[i] || i === dragIdx.current) continue;
+      const rect = rows[i].getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) {
+        const arr = [...currentArr.current];
+        const [moved] = arr.splice(dragIdx.current, 1);
+        arr.splice(i, 0, moved);
+        currentArr.current = arr;
+        onReorder(arr);
+        if (ghostRef.current) ghostRef.current.style.opacity = '0.7';
+        dragIdx.current = i;
+        break;
+      }
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (dragIdx.current !== null && rowRefs.current[dragIdx.current]) {
+      rowRefs.current[dragIdx.current].style.opacity = '1';
+    }
+    if (ghostRef.current) { ghostRef.current.remove(); ghostRef.current = null; }
+    dragIdx.current = null;
+  };
+
+  return { rowRefs, onTouchStart, onTouchMove, onTouchEnd };
+}
 const toDS=(y,m,d)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
 const tomorrowDS=()=>{const d=new Date();d.setDate(d.getDate()+1);return toDS(d.getFullYear(),d.getMonth(),d.getDate());};
 const todayDS=()=>{const n=new Date();return toDS(n.getFullYear(),n.getMonth(),n.getDate());};
@@ -333,9 +392,10 @@ function TaskRow({task,onComplete,onEdit,dragHandleProps,onSnooze,isParked}){
 
 function ProgressPromptModal({task,onLog,onClose}){const [note,setNote]=useState("");const [followUp,setFollowUp]=useState(task.dueDate||"");return(<div style={S.overlay} onClick={onClose}><div style={{...S.modal,maxWidth:380}} onClick={e=>e.stopPropagation()}><div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:6}}>🔄 {task.title}</div><textarea style={{...S.textarea,minHeight:80}} value={note} onChange={e=>setNote(e.target.value)} placeholder="What got done?" autoFocus/><div style={{marginTop:10,marginBottom:4,fontSize:".8rem",color:C.text3}}>Follow-up date (optional — adds Waiting status)</div><input type="date" style={{...S.input,width:"100%",fontSize:".84rem",padding:"6px 8px"}} value={followUp} onChange={e=>setFollowUp(e.target.value)}/><div style={{display:"flex",flexDirection:"column",gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}><button style={btn("primary")} onClick={()=>onLog(task.id,note,false,followUp)}>Save — Keep In Progress</button><button style={btn("ghost")} onClick={()=>onLog(task.id,note,true,followUp)}>Mark Complete</button></div></div></div>);}
 
-function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday}){
+function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday,showHandle}){
   const [hov,setHov]=useState(false);const proj=projects.find(p=>p.id===task.projectId);const priCol={A:{bg:"#fde8e7",color:C.pa},B:{bg:"#fef3e2",color:C.pb},C:{bg:"#e8f4e6",color:C.pc}};const priLabel={A:"Available",B:"Soon",C:"Someday"};const pc=priCol[task.priority]||priCol.A;
-  return(<div style={{display:"flex",alignItems:"flex-start",gap:14,padding:"5px 4px",borderRadius:6,background:hov?C.bg2:"transparent",transition:"background .12s"}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+  return(<div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"5px 4px",borderRadius:6,background:hov?C.bg2:"transparent",transition:"background .12s"}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+    {showHandle&&<div style={{color:C.text3,fontSize:"1rem",paddingTop:2,flexShrink:0,userSelect:"none",cursor:"grab",touchAction:"none",padding:"0 2px"}}>⠿</div>}
     <div onClick={()=>onComplete(task.id)} style={{width:18,height:18,border:`2px solid ${task.waiting?"#9b7bcc":C.accent}`,borderRadius:4,cursor:"pointer",flexShrink:0,marginTop:1,background:task.progressedOn===todayDS()?C.accent+"44":"transparent"}}/>
     <div style={{flex:1,minWidth:0}}>
       <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
@@ -402,6 +462,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
   const todayDragRef=useRef({idx:null});
   const recurDragRef=useRef({idx:null});
   const waitDragRef=useRef({idx:null});
+  const todayTouch=useTouchReorder(_todayActive,(arr)=>reorderToday(arr));
   const reorderTasks=(projId,pri,newArr)=>{
     setTasks(prev=>{
       const ids=new Set(newArr.map(t=>t.id));
@@ -422,15 +483,16 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
       </div>
       <div style={{padding:"2px 8px 8px"}}>
         {todayTasks.length===0?<div style={{color:C.text3,fontSize:".83rem",padding:"4px 2px",fontStyle:"italic"}}>Nothing committed yet — pull tasks from projects below or add one directly.</div>
-        :todayTasks.map((task,ti)=>(
-          <div key={task.id} draggable
-            onDragStart={()=>{todayDragRef.current={idx:ti};}}
-            onDragOver={e=>{e.preventDefault();const r=todayDragRef.current;if(r.idx===null||r.idx===ti)return;const arr=[...todayTasks];const[m]=arr.splice(r.idx,1);arr.splice(ti,0,m);todayDragRef.current.idx=ti;reorderToday(arr);}}
-            onDragEnd={()=>{todayDragRef.current={idx:null};}}
-            style={{cursor:"grab"}}>
-            <TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday}/>
-          </div>
-        ))}
+        :todayTasks.map((task,ti)=>{
+          const isActive=_todayActive.includes(task);
+          const activeIdx=_todayActive.indexOf(task);
+          return(<div key={task.id} ref={isActive?el=>todayTouch.rowRefs.current[activeIdx]=el:null}
+            onTouchStart={isActive?todayTouch.onTouchStart(activeIdx):undefined}
+            onTouchMove={isActive?todayTouch.onTouchMove:undefined}
+            onTouchEnd={isActive?todayTouch.onTouchEnd:undefined}
+            style={{touchAction:isActive?"none":"auto"}}>
+            <TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday} showHandle={isActive}/>
+          </div>);})}
       </div>
     </div>
     {(()=>{
@@ -439,7 +501,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
         if(t.waiting&&!t.onDeck)return false;
         const proj=projects.find(p=>p.id===t.projectId);
         if(proj?.parked)return false;
-        if(t.onDeck)return true;
+        if(t.onDeck&&t.priority==="A")return true;
         if(t.recur&&!t.dueDate&&!t.completedOn)return true;
         const today=todayDS();const threeDays=new Date();threeDays.setDate(threeDays.getDate()+3);const threeDaysDS=toDS(threeDays.getFullYear(),threeDays.getMonth(),threeDays.getDate());if(t.priority!=="A"&&!(t.dueDate&&t.dueDate<=threeDaysDS))return false;
         if(isAllCaps(t))return true;
@@ -593,11 +655,17 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
             const _projPriKey=proj.id+pri; // drag uses dragRef
             return <div key={pri} style={{marginBottom:4,opacity:isSub?.85:1}}>
               <div style={{display:"inline-flex",padding:"2px 8px",borderRadius:10,fontSize:".71rem",fontWeight:700,marginBottom:4,background:pc.bg,color:pc.color}}>{priLabel[pri]}</div>
-              {priTasks.map((task,ti)=>(
-                <div key={task.id} draggable
-                  onDragStart={()=>{dragRef.current={idx:ti,projId:proj.id,pri};}}
-                  onDragOver={e=>{e.preventDefault();const r=dragRef.current;if(r.idx===null||r.idx===ti||r.projId!==proj.id||r.pri!==pri)return;const arr=[...priTasks];const[m]=arr.splice(r.idx,1);arr.splice(ti,0,m);dragRef.current.idx=ti;reorderTasks(proj.id,pri,arr);}}
-                  onDragEnd={()=>{dragRef.current={idx:null,projId:null,pri:null};}} style={{display:"flex",alignItems:"flex-start",gap:4}}>
+              {(()=>{
+                const ptTouch={dragIdx:null,startY:0,rowEls:[],ghost:null};
+                const ptTouchStart=(i,e)=>{e.stopPropagation();ptTouch.dragIdx=i;ptTouch.startY=e.touches[0].clientY;const el=ptTouch.rowEls[i];if(!el)return;const g=el.cloneNode(true);const r=el.getBoundingClientRect();g.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;opacity:0.7;background:#fff;boxShadow:0 4px 12px rgba(0,0,0,.15);borderRadius:8px;zIndex:9999;pointerEvents:none;`;document.body.appendChild(g);ptTouch.ghost=g;el.style.opacity='0.3';};
+                const ptTouchMove=(e)=>{if(ptTouch.dragIdx===null||!ptTouch.ghost)return;e.preventDefault();const y=e.touches[0].clientY;ptTouch.ghost.style.top=(parseFloat(ptTouch.ghost.style.top)+y-ptTouch.startY)+'px';ptTouch.startY=y;for(let i=0;i<ptTouch.rowEls.length;i++){if(!ptTouch.rowEls[i]||i===ptTouch.dragIdx)continue;const r=ptTouch.rowEls[i].getBoundingClientRect();if(y>=r.top&&y<=r.bottom){const arr=[...priTasks];const[m]=arr.splice(ptTouch.dragIdx,1);arr.splice(i,0,m);reorderTasks(proj.id,pri,arr);ptTouch.dragIdx=i;break;}}};
+                const ptTouchEnd=()=>{if(ptTouch.dragIdx!==null&&ptTouch.rowEls[ptTouch.dragIdx])ptTouch.rowEls[ptTouch.dragIdx].style.opacity='1';if(ptTouch.ghost){ptTouch.ghost.remove();ptTouch.ghost=null;}ptTouch.dragIdx=null;};
+                return priTasks.map((task,ti)=>(
+                <div key={task.id} ref={el=>ptTouch.rowEls[ti]=el}
+                  onTouchStart={e=>ptTouchStart(ti,e)}
+                  onTouchMove={ptTouchMove}
+                  onTouchEnd={ptTouchEnd}
+                  style={{display:"flex",alignItems:"flex-start",gap:4,touchAction:"none"}}>
                   <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={!!proj.parked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
                   <div style={{display:"flex",flexDirection:"column",gap:2}}>
                     <div style={{display:"flex",gap:4}}>
@@ -606,7 +674,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
                     </div>
                   </div>
                 </div>
-              ))}
+              ));})}
             </div>;
           })}
         {isOpen&&(()=>{
