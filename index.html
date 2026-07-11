@@ -331,7 +331,7 @@ function TaskModal({task,projects,defaultProjectId,onSave,onClose,onRemoveToday,
     <FormRow label="Status">
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!waiting} onChange={e=>setWaiting(e.target.checked)} style={{width:16,height:16}}/><span>⏳ Waiting</span></label>
-        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!inProgress} onChange={e=>setInProgress(e.target.checked)} style={{width:16,height:16}}/><span>🔄 In Progress</span></label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!inProgress} onChange={e=>setInProgress(e.target.checked)} style={{width:16,height:16}}/><span>⏳ In Progress</span></label>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!trivial} onChange={e=>setTrivial(e.target.checked)} style={{width:16,height:16}}/><span title="Complete silently">🧹 Trivial</span></label>
         {task&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={markComplete} onChange={e=>{setMarkComplete(e.target.checked);if(e.target.checked){setInProgress(false);setWaiting(false);}}} style={{width:16,height:16}}/><span>✅ Complete</span></label>}
       </div>
@@ -379,8 +379,8 @@ function TaskRow({task,onComplete,onEdit,dragHandleProps,onSnooze,isParked}){
     <div style={{flex:1,minWidth:0}}>
       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
         <span style={{fontSize:".87rem",lineHeight:1.35,color:isWaiting?C.text3:C.text,cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:3}} onClick={()=>onEdit&&onEdit(task)}>{task.title}</span>
-        {isWaiting&&<span style={{fontSize:".8rem"}}>⏳</span>}
-        {task.inProgress&&!isWaiting&&<span style={{fontSize:".8rem"}}>🔄</span>}
+        {isWaiting&&<span style={{fontSize:".8rem"}}>⏸️</span>}
+        {task.inProgress&&!isWaiting&&<span style={{fontSize:".8rem"}}>⏳</span>}
         {task.trivial&&<span style={{fontSize:".8rem"}} title="Trivial">🧹</span>}
         {isStale(task)&&!isParked&&<span onClick={e=>{e.stopPropagation();onSnooze&&onSnooze(task.id);}} style={{fontSize:".75rem",cursor:"pointer",userSelect:"none"}} title="Snooze for 10 days">💤</span>}
         {task.dueDate&&<DueBadge dueDate={task.dueDate} calculatedDate={task.calculatedDate}/>}
@@ -401,8 +401,8 @@ function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday,showHa
       <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
         <span style={{fontSize:".83rem",lineHeight:1.3,cursor:"pointer",textDecoration:(task.doneDate||task.progressedOn===todayDS())?"line-through":"underline dotted",textUnderlineOffset:3,color:(task.doneDate||task.progressedOn===todayDS())?C.text3:C.text,opacity:(task.doneDate||task.progressedOn===todayDS())?.7:1}} onClick={()=>onEdit(task)}>{task.title}</span>
         
-        {task.inProgress&&!task.waiting&&<span style={{fontSize:".78rem"}}>🔄</span>}
-        {task.waiting&&<span style={{fontSize:".78rem"}}>⏳</span>}
+        {task.inProgress&&!task.waiting&&<span style={{fontSize:".78rem"}}>⏳</span>}
+        {task.waiting&&<span style={{fontSize:".78rem"}}>⏸️</span>}
         {proj&&proj.id!=="misc"&&<span style={{padding:"1px 6px",fontSize:".66rem",background:C.bg2,color:C.text3,borderRadius:4,border:`1px solid ${C.border}`}}>{proj.name}</span>}
         {task.dueDate&&!task.doneDate&&!task.progressedOn&&<DueBadge dueDate={task.dueDate}/>}
       </div>
@@ -415,7 +415,7 @@ function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday,showHa
   </div>);
 }
 
-function TodoTab({tasks,projects,setTasks,setProjects}){
+function TodoTab({tasks,projects,setTasks,setProjects,reorderMode}){
   const [showTask,setShowTask]=useState(false);const [editTask,setEditTask]=useState(null);const [showProj,setShowProj]=useState(false);const [collapsed,setCollapsed]=useState({__recur__:true,__completedProjs__:true});const [confirm,setConfirm]=useState(null);const [addingTo,setAddingTo]=useState(null);const [addingToToday,setAddingToToday]=useState(false);const [progressPrompt,setProgressPrompt]=useState(null);
   const active=tasks.filter(t=>!t.doneDate);
   const _todayActive=active.filter(t=>t.today).filter(t=>t.progressedOn!==todayDS()).sort(capsSort);
@@ -491,7 +491,13 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
             onTouchMove={isActive?todayTouch.onTouchMove:undefined}
             onTouchEnd={isActive?todayTouch.onTouchEnd:undefined}
             style={{touchAction:isActive?"none":"auto"}}>
-            <TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday} showHandle={isActive}/>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              {reorderMode&&isActive&&<div style={{display:"flex",flexDirection:"column",gap:1,flexShrink:0}}>
+                <button onClick={()=>{if(activeIdx===0)return;const arr=[..._todayActive];[arr[activeIdx-1],arr[activeIdx]]=[arr[activeIdx],arr[activeIdx-1]];reorderToday(arr);}} style={{padding:"0 6px",fontSize:".7rem",background:"none",border:`1px solid ${C.border}`,borderRadius:4,cursor:"pointer",color:C.text3,lineHeight:1.4}}>▲</button>
+                <button onClick={()=>{if(activeIdx===_todayActive.length-1)return;const arr=[..._todayActive];[arr[activeIdx],arr[activeIdx+1]]=[arr[activeIdx+1],arr[activeIdx]];reorderToday(arr);}} style={{padding:"0 6px",fontSize:".7rem",background:"none",border:`1px solid ${C.border}`,borderRadius:4,cursor:"pointer",color:C.text3,lineHeight:1.4}}>▼</button>
+              </div>}
+              <div style={{flex:1}}><TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday} showHandle={false}/></div>
+            </div>
           </div>);})}
       </div>
     </div>
@@ -570,7 +576,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
     })()}
     {(()=>{const wt=active.filter(t=>t.waiting);if(!wt.length)return null;return(<div style={{background:C.card,border:`1px solid #b8c8e0`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#e8f0f8",cursor:"pointer"}} onClick={()=>setCollapsed(c=>({...c,__waiting__:!c.__waiting__}))}>
-        <span>⏳</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:"#2a4a68"}}>Waiting</span>
+        <span>⏸️</span><span style={{fontWeight:600,fontSize:".9rem",flex:1,color:"#2a4a68"}}>Waiting</span>
         <span style={{fontSize:".7rem",color:"#4a6a88",fontStyle:"italic",marginRight:6}}>external only</span>
         <span style={{fontSize:".75rem",color:"#4a6a88"}}>{wt.length} blocked</span><span style={{color:"#9b7bcc",marginLeft:4}}>▾</span>
       </div>
@@ -668,10 +674,12 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
                   style={{display:"flex",alignItems:"flex-start",gap:4,touchAction:"none"}}>
                   <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={!!proj.parked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
                   <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                    <div style={{display:"flex",gap:4}}>
-                      
+                    {reorderMode?<div style={{display:"flex",flexDirection:"column",gap:1}}>
+                      <button onClick={()=>{if(ti===0)return;const arr=[...priTasks];[arr[ti-1],arr[ti]]=[arr[ti],arr[ti-1]];reorderTasks(proj.id,pri,arr);}} style={{padding:"0 6px",fontSize:".7rem",background:"none",border:`1px solid ${C.border}`,borderRadius:4,cursor:"pointer",color:C.text3,lineHeight:1.4}}>▲</button>
+                      <button onClick={()=>{if(ti===priTasks.length-1)return;const arr=[...priTasks];[arr[ti],arr[ti+1]]=[arr[ti+1],arr[ti]];reorderTasks(proj.id,pri,arr);}} style={{padding:"0 6px",fontSize:".7rem",background:"none",border:`1px solid ${C.border}`,borderRadius:4,cursor:"pointer",color:C.text3,lineHeight:1.4}}>▼</button>
+                    </div>:<div style={{display:"flex",gap:4}}>
                       <button onClick={()=>task.today?removeFromToday(task.id):addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:task.today?"#B8941F":C.text3,border:`1px solid ${task.today?"#B8941F":C.border}`,borderRadius:8,background:task.today?C.td2:"transparent",cursor:"pointer"}}>{task.today?"− Today":"+ Today"}</button>
-                    </div>
+                    </div>}
                   </div>
                 </div>
               ));})}
@@ -782,7 +790,7 @@ function CheckInPanel({moodData,actData,tasks,coachLogs,dismissed,onDismiss,onSa
     // Mood/activity last 5 days
     const recent=[];for(let i=0;i<5;i++){const d=new Date();d.setDate(d.getDate()-i);const k=toDS(d.getFullYear(),d.getMonth(),d.getDate());if(moodData[k]||actData[k])recent.push({date:k,mood:moodData[k]?.mood,phys:actData[k]?.phys});}
     // Active tasks
-    const ts=tasks.filter(t=>!t.doneDate).slice(0,12).map(t=>`[${t.priority}${t.today?"★":""}${t.inProgress?"🔄":""}${t.waiting?"⏳":""}] ${t.title}${t.dueDate?" (due:"+t.dueDate+")":""}`);
+    const ts=tasks.filter(t=>!t.doneDate).slice(0,12).map(t=>`[${t.priority}${t.today?"★":""}${t.inProgress?"⏳":""}${t.waiting?"⏸️":""}] ${t.title}${t.dueDate?" (due:"+t.dueDate+")":""}`);
     // Recent completions last 7 days
     const sevenAgo=new Date();sevenAgo.setDate(sevenAgo.getDate()-7);const sevenAgoDS=toDS(sevenAgo.getFullYear(),sevenAgo.getMonth(),sevenAgo.getDate());
     const done=tasks.filter(t=>t.doneDate&&t.doneDate>=sevenAgoDS).map(t=>`${t.title} (completed:${t.completedOn||t.doneDate}${t.completedTime?" at "+t.completedTime:""})`);
@@ -848,7 +856,7 @@ function PendingCatchupBanner({coachLogs,onSaveLog}){
   if(!pending.length||done)return null;
   const catchUp=async()=>{setCatching(true);for(const{dateKey,log}of pending){setStatus(`Catching up on your ${log.type} check-in from ${dateKey}…`);const cleanMsgs=log.messages.filter(m=>m.content!=="__pending__");try{const r=await askCoach(cleanMsgs);onSaveLog(dateKey,log.type,[...cleanMsgs,{role:"assistant",content:r}]);}catch(e){setStatus("Still offline — try again later.");setCatching(false);return;}}setStatus("");setCatching(false);setDone(true);};
   return(<div style={{background:"#FEF3C7",border:"1.5px solid #D4A820",borderRadius:12,padding:"12px 14px",marginBottom:16,display:"flex",alignItems:"flex-start",gap:10}}>
-    <span style={{fontSize:"1.2rem",flexShrink:0}}>⏳</span>
+    <span style={{fontSize:"1.2rem",flexShrink:0}}>⏸️</span>
     <div style={{flex:1}}><div style={{fontWeight:600,fontSize:".88rem",marginBottom:3}}>{pending.length} check-in {pending.length===1?"response":"responses"} waiting</div><div style={{fontSize:".8rem",color:"#6b4c0a"}}>{catching?status:"Your thoughts were saved while Coach was offline. Ready to respond now."}</div></div>
     {!catching&&<button onClick={catchUp} style={{flexShrink:0,padding:"6px 14px",background:"#B8941F",color:"#fff",border:"none",borderRadius:8,fontSize:".82rem",fontWeight:600,cursor:"pointer"}}>Catch up</button>}
     {catching&&<div style={{flexShrink:0,fontSize:".82rem",color:"#6b4c0a",fontStyle:"italic"}}>Working…</div>}
@@ -963,7 +971,7 @@ function ExportModal({moodData,actData,tasks,projects,moodWords,actWords,coachLo
 
 function App(){
   useEffect(()=>{const style=document.createElement("style");style.innerHTML=`*{box-sizing:border-box!important;}body,html{margin:0!important;padding:0!important;}`;document.head.appendChild(style);return()=>document.head.removeChild(style);},[]);
-  const [tab,setTab]=useState("coach");const [loaded,setLoaded]=useState(false);const [showExport,setShowExport]=useState(false);const [showSearch,setShowSearch]=useState(false);const [searchQ,setSearchQ]=useState("");
+  const [tab,setTab]=useState("coach");const [loaded,setLoaded]=useState(false);const [showExport,setShowExport]=useState(false);const [showSearch,setShowSearch]=useState(false);const [searchQ,setSearchQ]=useState("");const [reorderMode,setReorderMode]=useState(false);
   const [moodData,setMoodData]=useState({});const [actData,setActData]=useState({});const [projects,setProjects]=useState([]);const [tasks,setTasks]=useState([]);const [moodWords,setMoodWords]=useState([]);const [actWords,setActWords]=useState([]);const [coachLogs,setCoachLogs]=useState({});const [coachMemory,setCoachMemory]=useState({insights:[],lastUpdated:null});
   const [moodModal,setMoodModal]=useState(null);const [wordModal,setWordModal]=useState(null);const [checkInDismissed,setCheckInDismissed]=useState(false);const [showSettings,setShowSettings]=useState(false);
 
@@ -1005,6 +1013,7 @@ if(t.waiting&&!t.doneDate&&t.dueDate&&t.dueDate<=threeDaysStr&&!t.onDeck){change
       <div style={{display:"flex",gap:6,alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg2,border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 10px",fontSize:".75rem",fontWeight:600,color:C.accent}}>🔥 {streak} day streak</div>
         <button onClick={()=>{setShowSearch(v=>!v);setSearchQ("");}} style={{...S.btnIcon,fontSize:".72rem",padding:"3px 8px",width:"auto",color:showSearch?C.accent:C.text3,background:showSearch?C.bg2:"transparent"}} title="Search tasks">🔍</button>
+        <button onClick={()=>setReorderMode(v=>!v)} style={{...S.btnIcon,fontSize:".72rem",padding:"3px 8px",width:"auto",color:reorderMode?"#fff":C.text3,background:reorderMode?C.accent:"transparent",border:reorderMode?`1px solid ${C.accent}`:`1px solid ${C.border}`}} title="Reorder tasks">⇅</button>
         <button onClick={()=>setShowSettings(true)} style={{...S.btnIcon,fontSize:".72rem",padding:"3px 8px",width:"auto",color:C.text3}} title="Settings">⚙️</button><button onClick={()=>setShowExport(true)} style={{...S.btnIcon,fontSize:".72rem",padding:"3px 8px",width:"auto",color:C.text3}} title="Backup / Restore">💾</button>
       </div>
     </header>
@@ -1032,7 +1041,7 @@ if(t.waiting&&!t.doneDate&&t.dueDate&&t.dueDate<=threeDaysStr&&!t.onDeck){change
     <nav style={S.tabbar}>{TABS.map(([id,label])=><button key={id} style={{flexShrink:0,padding:"6px 6px",background:"none",border:"none",borderBottom:tab===id?`3px solid ${C.accent}`:"3px solid transparent",fontSize:".74rem",fontWeight:tab===id?600:500,color:tab===id?C.accent:C.text2,cursor:"pointer",whiteSpace:"nowrap",transition:"all .18s"}} onClick={()=>setTab(id)}>{label}</button>)}</nav>
     <div style={S.panel}>
       {tab==="mood"&&<div style={S.card}><MoodCalendar moodData={moodData} tasks={tasks} coachLogs={coachLogs} onDayClick={setMoodModal}/></div>}
-      {tab==="todo"&&<TodoTab tasks={tasks} projects={projects} setTasks={setTasks} setProjects={setProjects}/>}
+      {tab==="todo"&&<TodoTab tasks={tasks} projects={projects} setTasks={setTasks} setProjects={setProjects} reorderMode={reorderMode}/>}
       {tab==="completed"&&<CompletedTab tasks={tasks} projects={projects} setTasks={setTasks}/>}
       {tab==="coach"&&<CoachTab moodData={moodData} actData={actData} tasks={tasks} projects={projects} setTasks={setTasks} coachMemory={coachMemory} onUpdateMemory={handleUpdateMemory} coachLogs={coachLogs} onSaveLog={saveCoachLog} checkInDismissed={checkInDismissed} onDismissCheckIn={()=>setCheckInDismissed(v=>!v)} moodWords={moodWords} onSaveMood={saveMood} onSaveAct={(key,data)=>setActData(a=>({...a,[key]:data}))}/>}
     </div>
