@@ -32,65 +32,6 @@ const DOWS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const uid=()=>Math.random().toString(36).slice(2,9);
 const isAllCaps=t=>t.title&&t.title===t.title.toUpperCase()&&t.title.replace(/[^a-zA-Z]/g,"").length>0;
 const capsSort=(a,b)=>{const ac=isAllCaps(a),bc=isAllCaps(b);if(ac&&!bc)return -1;if(!ac&&bc)return 1;return 0;};
-
-// Touch-friendly drag reorder hook
-function useTouchReorder(items, onReorder) {
-  const dragIdx = useRef(null);
-  const rowRefs = useRef([]);
-  const ghostRef = useRef(null);
-  const startY = useRef(0);
-  const currentArr = useRef([...items]);
-
-  useEffect(() => { currentArr.current = [...items]; }, [items]);
-
-  const onTouchStart = (idx) => (e) => {
-    e.stopPropagation();
-    dragIdx.current = idx;
-    startY.current = e.touches[0].clientY;
-    // Create ghost element
-    const row = rowRefs.current[idx];
-    if (!row) return;
-    const ghost = row.cloneNode(true);
-    ghost.style.cssText = `position:fixed;left:${row.getBoundingClientRect().left}px;top:${row.getBoundingClientRect().top}px;width:${row.offsetWidth}px;opacity:0.7;background:#fff;boxShadow:0 4px 12px rgba(0,0,0,.15);borderRadius:8px;zIndex:9999;pointerEvents:none;`;
-    document.body.appendChild(ghost);
-    ghostRef.current = ghost;
-    row.style.opacity = '0.3';
-  };
-
-  const onTouchMove = (e) => {
-    if (dragIdx.current === null || !ghostRef.current) return;
-    e.preventDefault();
-    const y = e.touches[0].clientY;
-    ghostRef.current.style.top = (parseFloat(ghostRef.current.style.top) + y - startY.current) + 'px';
-    startY.current = y;
-    // Find which row we're over
-    const rows = rowRefs.current;
-    for (let i = 0; i < rows.length; i++) {
-      if (!rows[i] || i === dragIdx.current) continue;
-      const rect = rows[i].getBoundingClientRect();
-      if (y >= rect.top && y <= rect.bottom) {
-        const arr = [...currentArr.current];
-        const [moved] = arr.splice(dragIdx.current, 1);
-        arr.splice(i, 0, moved);
-        currentArr.current = arr;
-        onReorder(arr);
-        if (ghostRef.current) ghostRef.current.style.opacity = '0.7';
-        dragIdx.current = i;
-        break;
-      }
-    }
-  };
-
-  const onTouchEnd = () => {
-    if (dragIdx.current !== null && rowRefs.current[dragIdx.current]) {
-      rowRefs.current[dragIdx.current].style.opacity = '1';
-    }
-    if (ghostRef.current) { ghostRef.current.remove(); ghostRef.current = null; }
-    dragIdx.current = null;
-  };
-
-  return { rowRefs, onTouchStart, onTouchMove, onTouchEnd };
-}
 const toDS=(y,m,d)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
 const tomorrowDS=()=>{const d=new Date();d.setDate(d.getDate()+1);return toDS(d.getFullYear(),d.getMonth(),d.getDate());};
 const todayDS=()=>{const n=new Date();return toDS(n.getFullYear(),n.getMonth(),n.getDate());};
@@ -392,10 +333,9 @@ function TaskRow({task,onComplete,onEdit,dragHandleProps,onSnooze,isParked}){
 
 function ProgressPromptModal({task,onLog,onClose}){const [note,setNote]=useState("");const [followUp,setFollowUp]=useState(task.dueDate||"");return(<div style={S.overlay} onClick={onClose}><div style={{...S.modal,maxWidth:380}} onClick={e=>e.stopPropagation()}><div style={{fontFamily:"Georgia,serif",fontSize:"1.1rem",fontWeight:600,marginBottom:6}}>🔄 {task.title}</div><textarea style={{...S.textarea,minHeight:80}} value={note} onChange={e=>setNote(e.target.value)} placeholder="What got done?" autoFocus/><div style={{marginTop:10,marginBottom:4,fontSize:".8rem",color:C.text3}}>Follow-up date (optional — adds Waiting status)</div><input type="date" style={{...S.input,width:"100%",fontSize:".84rem",padding:"6px 8px"}} value={followUp} onChange={e=>setFollowUp(e.target.value)}/><div style={{display:"flex",flexDirection:"column",gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}><button style={btn("primary")} onClick={()=>onLog(task.id,note,false,followUp)}>Save — Keep In Progress</button><button style={btn("ghost")} onClick={()=>onLog(task.id,note,true,followUp)}>Mark Complete</button></div></div></div>);}
 
-function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday,showHandle}){
+function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday}){
   const [hov,setHov]=useState(false);const proj=projects.find(p=>p.id===task.projectId);const priCol={A:{bg:"#fde8e7",color:C.pa},B:{bg:"#fef3e2",color:C.pb},C:{bg:"#e8f4e6",color:C.pc}};const priLabel={A:"Available",B:"Soon",C:"Someday"};const pc=priCol[task.priority]||priCol.A;
-  return(<div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"5px 4px",borderRadius:6,background:hov?C.bg2:"transparent",transition:"background .12s"}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
-    {showHandle&&<div style={{color:C.text3,fontSize:"1rem",paddingTop:2,flexShrink:0,userSelect:"none",cursor:"grab",touchAction:"none",padding:"0 2px"}}>⠿</div>}
+  return(<div style={{display:"flex",alignItems:"flex-start",gap:14,padding:"5px 4px",borderRadius:6,background:hov?C.bg2:"transparent",transition:"background .12s"}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
     <div onClick={()=>onComplete(task.id)} style={{width:18,height:18,border:`2px solid ${task.waiting?"#9b7bcc":C.accent}`,borderRadius:4,cursor:"pointer",flexShrink:0,marginTop:1,background:task.progressedOn===todayDS()?C.accent+"44":"transparent"}}/>
     <div style={{flex:1,minWidth:0}}>
       <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
@@ -521,34 +461,12 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
               <div style={{flex:1,minWidth:0}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0,marginTop:3}}>
                 <button onClick={()=>addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:"#B8941F",border:`1px solid #B8941F`,borderRadius:8,background:C.td2,cursor:"pointer"}}>+ Today</button>
-                
+                {task.onDeck&&<button onClick={()=>setTasks(prev=>prev.map(x=>x.id===task.id?{...x,onDeck:undefined}:x))} style={{padding:"2px 8px",fontSize:".7rem",color:C.text3,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer"}}>− Deck</button>}
               </div>
             </div>
           ))}
         {(()=>{
-          // Available - Projects sublist
-          const availProjects=active.filter(t=>{
-            if(t.today||t.doneDate||t.waiting||t.recur||t.priority!=="A")return false;
-            if(t.projectId==="misc")return false;
-            const proj=projects.find(p=>p.id===t.projectId);
-            if(!proj||proj.parked||proj.completed)return false;
-            if(onDeckTasks.find(x=>x.id===t.id))return false;
-            return true;
-          });
-          if(availProjects.length>0){const apOpen=collapsed.__availProjects__===true;return(<div style={{borderTop:`1px solid ${C.pa}22`,marginTop:4}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",cursor:"pointer",userSelect:"none"}} onClick={()=>setCollapsed(c=>({...c,__availProjects__:!c.__availProjects__}))}>
-              <span style={{fontSize:".78rem",color:C.pa,fontWeight:600,flex:1}}>Available — Projects ({availProjects.length})</span>
-              <span style={{fontSize:".7rem",color:C.text3,transform:apOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span>
-            </div>
-            {apOpen&&<div style={{padding:"2px 10px 8px"}}>
-              {availProjects.sort(capsSort).map(t=>{const proj=projects.find(p=>p.id===t.projectId);return(<div key={t.id} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 0"}}>
-                <div style={{flex:1,fontSize:".83rem",color:C.text,cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:2,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>{setEditTask(t);setShowTask(true);}}>{t.title}{proj&&<span style={{fontSize:".72rem",color:C.text3,marginLeft:6}}>{proj.name}</span>}</div>
-                <button onClick={()=>addToToday(t.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:"#B8941F",border:`1px solid #B8941F`,borderRadius:8,background:C.td2,cursor:"pointer",flexShrink:0}}>+ Today</button>
-              </div>);})}
-            </div>}
-          </div>);}
-          return null;
-        })()}
+          const availProjects=active.filter(t=>{if(t.today||t.doneDate||t.waiting||t.recur||t.priority!=="A")return false;if(t.projectId==="misc")return false;const proj=projects.find(p=>p.id===t.projectId);if(!proj||proj.parked||proj.completed)return false;if(onDeckTasks.find(x=>x.id===t.id))return false;return true;});if(availProjects.length>0){const apOpen=collapsed.__availProjects__===true;return(<div style={{borderTop:`1px solid ${C.pa}22`,marginTop:4}}><div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",cursor:"pointer",userSelect:"none"}} onClick={()=>setCollapsed(c=>({...c,__availProjects__:!c.__availProjects__}))}><span style={{fontSize:".78rem",color:C.pa,fontWeight:600,flex:1}}>Available — Projects ({availProjects.length})</span><span style={{fontSize:".7rem",color:C.text3,transform:apOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span></div>{apOpen&&<div style={{padding:"2px 10px 8px"}}>{availProjects.sort(capsSort).map(t=>{const proj=projects.find(p=>p.id===t.projectId);return(<div key={t.id} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 0"}}><div style={{flex:1,fontSize:".83rem",color:C.text,cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:2,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>{setEditTask(t);setShowTask(true);}}>{t.title}{proj&&<span style={{fontSize:".72rem",color:C.text3,marginLeft:6}}>{proj.name}</span>}</div><button onClick={()=>addToToday(t.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:"#B8941F",border:`1px solid #B8941F`,borderRadius:8,background:C.td2,cursor:"pointer",flexShrink:0}}>+ Today</button></div>);})}</div>}</div>);}return null;})()}
         {(()=>{
           const soonNoDates=active.filter(t=>t.priority==="B"&&!t.dueDate&&!t.today&&!t.doneDate&&!t.recur&&!t.waiting&&!projects.find(p=>p.id===t.projectId)?.parked);
           if(!soonNoDates.length)return null;
