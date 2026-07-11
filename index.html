@@ -462,7 +462,6 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
   const todayDragRef=useRef({idx:null});
   const recurDragRef=useRef({idx:null});
   const waitDragRef=useRef({idx:null});
-  const todayTouch=useTouchReorder(_todayActive,(arr)=>reorderToday(arr));
   const reorderTasks=(projId,pri,newArr)=>{
     setTasks(prev=>{
       const ids=new Set(newArr.map(t=>t.id));
@@ -486,17 +485,13 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
         :todayTasks.map((task,ti)=>{
           const isActive=_todayActive.includes(task);
           const activeIdx=_todayActive.indexOf(task);
-          return(<div key={task.id} ref={isActive?el=>todayTouch.rowRefs.current[activeIdx]=el:null}
-            onTouchStart={isActive?todayTouch.onTouchStart(activeIdx):undefined}
-            onTouchMove={isActive?todayTouch.onTouchMove:undefined}
-            onTouchEnd={isActive?todayTouch.onTouchEnd:undefined}
-            style={{touchAction:isActive?"none":"auto"}}>
+          return(<div key={task.id}>
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               {reorderMode&&isActive&&<div style={{display:"flex",flexDirection:"column",gap:1,flexShrink:0}}>
                 <button onClick={()=>{if(activeIdx===0)return;const arr=[..._todayActive];[arr[activeIdx-1],arr[activeIdx]]=[arr[activeIdx],arr[activeIdx-1]];reorderToday(arr);}} style={{padding:"0 6px",fontSize:".7rem",background:"none",border:`1px solid ${C.border}`,borderRadius:4,cursor:"pointer",color:C.text3,lineHeight:1.4}}>▲</button>
                 <button onClick={()=>{if(activeIdx===_todayActive.length-1)return;const arr=[..._todayActive];[arr[activeIdx],arr[activeIdx+1]]=[arr[activeIdx+1],arr[activeIdx]];reorderToday(arr);}} style={{padding:"0 6px",fontSize:".7rem",background:"none",border:`1px solid ${C.border}`,borderRadius:4,cursor:"pointer",color:C.text3,lineHeight:1.4}}>▼</button>
               </div>}
-              <div style={{flex:1}}><TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday} showHandle={false}/></div>
+              <div style={{flex:1}}><TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday}/></div>
             </div>
           </div>);})}
       </div>
@@ -661,17 +656,8 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
             const _projPriKey=proj.id+pri; // drag uses dragRef
             return <div key={pri} style={{marginBottom:4,opacity:isSub?.85:1}}>
               <div style={{display:"inline-flex",padding:"2px 8px",borderRadius:10,fontSize:".71rem",fontWeight:700,marginBottom:4,background:pc.bg,color:pc.color}}>{priLabel[pri]}</div>
-              {(()=>{
-                const ptTouch={dragIdx:null,startY:0,rowEls:[],ghost:null};
-                const ptTouchStart=(i,e)=>{e.stopPropagation();ptTouch.dragIdx=i;ptTouch.startY=e.touches[0].clientY;const el=ptTouch.rowEls[i];if(!el)return;const g=el.cloneNode(true);const r=el.getBoundingClientRect();g.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;opacity:0.7;background:#fff;boxShadow:0 4px 12px rgba(0,0,0,.15);borderRadius:8px;zIndex:9999;pointerEvents:none;`;document.body.appendChild(g);ptTouch.ghost=g;el.style.opacity='0.3';};
-                const ptTouchMove=(e)=>{if(ptTouch.dragIdx===null||!ptTouch.ghost)return;e.preventDefault();const y=e.touches[0].clientY;ptTouch.ghost.style.top=(parseFloat(ptTouch.ghost.style.top)+y-ptTouch.startY)+'px';ptTouch.startY=y;for(let i=0;i<ptTouch.rowEls.length;i++){if(!ptTouch.rowEls[i]||i===ptTouch.dragIdx)continue;const r=ptTouch.rowEls[i].getBoundingClientRect();if(y>=r.top&&y<=r.bottom){const arr=[...priTasks];const[m]=arr.splice(ptTouch.dragIdx,1);arr.splice(i,0,m);reorderTasks(proj.id,pri,arr);ptTouch.dragIdx=i;break;}}};
-                const ptTouchEnd=()=>{if(ptTouch.dragIdx!==null&&ptTouch.rowEls[ptTouch.dragIdx])ptTouch.rowEls[ptTouch.dragIdx].style.opacity='1';if(ptTouch.ghost){ptTouch.ghost.remove();ptTouch.ghost=null;}ptTouch.dragIdx=null;};
-                return priTasks.map((task,ti)=>(
-                <div key={task.id} ref={el=>ptTouch.rowEls[ti]=el}
-                  onTouchStart={e=>ptTouchStart(ti,e)}
-                  onTouchMove={ptTouchMove}
-                  onTouchEnd={ptTouchEnd}
-                  style={{display:"flex",alignItems:"flex-start",gap:4,touchAction:"none"}}>
+              {priTasks.map((task,ti)=>(
+                <div key={task.id} style={{display:"flex",alignItems:"flex-start",gap:4}}>
                   <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={!!proj.parked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
                   <div style={{display:"flex",flexDirection:"column",gap:2}}>
                     {reorderMode?<div style={{display:"flex",flexDirection:"column",gap:1}}>
@@ -682,7 +668,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
                     </div>}
                   </div>
                 </div>
-              ));})}
+              ))}
             </div>;
           })}
         {isOpen&&(()=>{
