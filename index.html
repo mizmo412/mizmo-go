@@ -355,6 +355,87 @@ function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday}){
   </div>);
 }
 
+function PriorityGroup({projId,pri,priTasks,priLabel,priCol,completeTask,setEditTask,setShowTask,addToToday,removeFromToday,reorderTasks,isParked,setTasks}){
+  const containerRef=useRef(null);
+  const stateRef=useRef({idx:null,ghost:null,startY:0,rowEls:[],tasks:priTasks});
+  stateRef.current.tasks=priTasks;
+  const pc=priCol[pri];const isSub=pri==="B"||pri==="C";
+
+  useEffect(()=>{
+    const container=containerRef.current;
+    if(!container)return;
+
+    const handleTouchStart=(e)=>{
+      const r=stateRef.current;
+      const touch=e.touches[0];
+      const el=r.rowEls.find(row=>row&&row.contains(e.target));
+      if(!el)return;
+      const idx=r.rowEls.indexOf(el);
+      if(idx===-1)return;
+      r.idx=idx;
+      r.startY=touch.clientY;
+      const rect=el.getBoundingClientRect();
+      const ghost=el.cloneNode(true);
+      ghost.style.cssText=`position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:0.75;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.18);border-radius:8px;z-index:9999;pointer-events:none;`;
+      document.body.appendChild(ghost);
+      r.ghost=ghost;
+      el.style.opacity='0.3';
+    };
+
+    const handleTouchMove=(e)=>{
+      const r=stateRef.current;
+      if(r.idx===null||!r.ghost)return;
+      e.preventDefault();
+      const y=e.touches[0].clientY;
+      const dy=y-r.startY;
+      r.ghost.style.top=(parseFloat(r.ghost.style.top)+dy)+'px';
+      r.startY=y;
+      for(let i=0;i<r.rowEls.length;i++){
+        if(!r.rowEls[i]||i===r.idx)continue;
+        const rect=r.rowEls[i].getBoundingClientRect();
+        if(y>=rect.top&&y<=rect.bottom){
+          const arr=[...r.tasks];
+          const[m]=arr.splice(r.idx,1);
+          arr.splice(i,0,m);
+          reorderTasks(projId,pri,arr);
+          r.idx=i;
+          break;
+        }
+      }
+    };
+
+    const handleTouchEnd=()=>{
+      const r=stateRef.current;
+      if(r.idx!==null&&r.rowEls[r.idx])r.rowEls[r.idx].style.opacity='1';
+      if(r.ghost){r.ghost.remove();r.ghost=null;}
+      r.idx=null;
+    };
+
+    container.addEventListener('touchstart',handleTouchStart,{passive:true});
+    container.addEventListener('touchmove',handleTouchMove,{passive:false});
+    container.addEventListener('touchend',handleTouchEnd,{passive:true});
+
+    return()=>{
+      container.removeEventListener('touchstart',handleTouchStart);
+      container.removeEventListener('touchmove',handleTouchMove);
+      container.removeEventListener('touchend',handleTouchEnd);
+    };
+  },[projId,pri,reorderTasks]);
+
+  return(<div ref={containerRef} style={{marginBottom:4,opacity:isSub?.85:1,userSelect:"none"}}>
+    <div style={{display:"inline-flex",padding:"2px 8px",borderRadius:10,fontSize:".71rem",fontWeight:700,marginBottom:4,background:pc.bg,color:pc.color}}>{priLabel[pri]}</div>
+    {priTasks.map((task,ti)=>(
+      <div key={task.id} ref={el=>stateRef.current.rowEls[ti]=el}
+        style={{display:"flex",alignItems:"flex-start",gap:4,cursor:"grab"}}>
+        <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={isParked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>task.today?removeFromToday(task.id):addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:task.today?"#B8941F":C.text3,border:`1px solid ${task.today?"#B8941F":C.border}`,borderRadius:8,background:task.today?C.td2:"transparent",cursor:"pointer"}}>{task.today?"− Today":"+ Today"}</button>
+        </div>
+      </div>
+    ))}
+  </div>);
+}
+
 function TodoTab({tasks,projects,setTasks,setProjects}){
   const [showTask,setShowTask]=useState(false);const [editTask,setEditTask]=useState(null);const [showProj,setShowProj]=useState(false);const [collapsed,setCollapsed]=useState({__recur__:true,__completedProjs__:true});const [confirm,setConfirm]=useState(null);const [addingTo,setAddingTo]=useState(null);const [addingToToday,setAddingToToday]=useState(false);const [progressPrompt,setProgressPrompt]=useState(null);
   const active=tasks.filter(t=>!t.doneDate);
@@ -402,6 +483,47 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
   const todayDragRef=useRef({idx:null});
   const recurDragRef=useRef({idx:null});
   const waitDragRef=useRef({idx:null});
+  const todayContainerRef=useRef(null);
+  const todayTouchState=useRef({idx:null,ghost:null,startY:0,rowEls:[],tasks:[]});
+  useEffect(()=>{
+    const container=todayContainerRef.current;
+    if(!container)return;
+    const s=todayTouchState.current;
+    const onStart=(e)=>{
+      const el=s.rowEls.find(r=>r&&r.contains(e.target));
+      if(!el)return;
+      const idx=s.rowEls.indexOf(el);
+      if(idx===-1||idx>=s.tasks.length)return;
+      s.idx=idx;s.startY=e.touches[0].clientY;
+      const rect=el.getBoundingClientRect();
+      const ghost=el.cloneNode(true);
+      ghost.style.cssText=`position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:0.75;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.18);border-radius:8px;z-index:9999;pointer-events:none;`;
+      document.body.appendChild(ghost);s.ghost=ghost;el.style.opacity='0.3';
+    };
+    const onMove=(e)=>{
+      if(s.idx===null||!s.ghost)return;
+      e.preventDefault();
+      const y=e.touches[0].clientY;
+      s.ghost.style.top=(parseFloat(s.ghost.style.top)+(y-s.startY))+'px';
+      s.startY=y;
+      for(let i=0;i<s.rowEls.length;i++){
+        if(!s.rowEls[i]||i===s.idx||i>=s.tasks.length)continue;
+        const rect=s.rowEls[i].getBoundingClientRect();
+        if(y>=rect.top&&y<=rect.bottom){
+          const arr=[...s.tasks];const[m]=arr.splice(s.idx,1);arr.splice(i,0,m);
+          reorderToday(arr);s.idx=i;break;
+        }
+      }
+    };
+    const onEnd=()=>{
+      if(s.idx!==null&&s.rowEls[s.idx])s.rowEls[s.idx].style.opacity='1';
+      if(s.ghost){s.ghost.remove();s.ghost=null;}s.idx=null;
+    };
+    container.addEventListener('touchstart',onStart,{passive:true});
+    container.addEventListener('touchmove',onMove,{passive:false});
+    container.addEventListener('touchend',onEnd,{passive:true});
+    return()=>{container.removeEventListener('touchstart',onStart);container.removeEventListener('touchmove',onMove);container.removeEventListener('touchend',onEnd);};
+  },[]);
   const reorderTasks=(projId,pri,newArr)=>{
     setTasks(prev=>{
       const ids=new Set(newArr.map(t=>t.id));
@@ -422,11 +544,15 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
       </div>
       <div style={{padding:"2px 8px 8px"}}>
         {todayTasks.length===0?<div style={{color:C.text3,fontSize:".83rem",padding:"4px 2px",fontStyle:"italic"}}>Nothing committed yet — pull tasks from projects below or add one directly.</div>
-        :todayTasks.map((task,ti)=>(
-          <div key={task.id}>
-            <TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday}/>
-          </div>
-        ))}
+        :(<div ref={el=>{todayContainerRef.current=el;todayTouchState.current.tasks=_todayActive;}}>
+          {todayTasks.map((task,ti)=>{
+            const activeIdx=_todayActive.indexOf(task);
+            const isActive=activeIdx!==-1;
+            return(<div key={task.id} ref={isActive?el=>todayTouchState.current.rowEls[activeIdx]=el:null} style={{userSelect:"none"}}>
+              <TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday}/>
+            </div>);
+          })}
+        </div>)}
       </div>
     </div>
     {(()=>{
@@ -563,18 +689,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
           {["A","B","C"].map(pri=>{
             const priTasks=pt.filter(t=>t.priority===pri&&!t.recur&&!t.doneDate).slice().sort((a,b)=>{const cc=capsSort(a,b);if(cc!==0)return cc;const aHas=!!a.dueDate,bHas=!!b.dueDate;if(aHas&&!bHas)return-1;if(!aHas&&bHas)return 1;if(aHas&&bHas&&a.dueDate!==b.dueDate)return a.dueDate<b.dueDate?-1:1;if(a.inProgress&&!b.inProgress)return-1;if(!a.inProgress&&b.inProgress)return 1;return 0;});
             if(!priTasks.length)return null;
-            const pc=priCol[pri];const isSub=pri==="B"||pri==="C";
-            return <div key={pri} style={{marginBottom:4,opacity:isSub?.85:1}}>
-              <div style={{display:"inline-flex",padding:"2px 8px",borderRadius:10,fontSize:".71rem",fontWeight:700,marginBottom:4,background:pc.bg,color:pc.color}}>{priLabel[pri]}</div>
-              {priTasks.map((task,ti)=>(
-                <div key={task.id} style={{display:"flex",alignItems:"flex-start",gap:4}}>
-                  <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={!!proj.parked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
-                  <div style={{display:"flex",gap:4}}>
-                    <button onClick={()=>task.today?removeFromToday(task.id):addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:task.today?"#B8941F":C.text3,border:`1px solid ${task.today?"#B8941F":C.border}`,borderRadius:8,background:task.today?C.td2:"transparent",cursor:"pointer"}}>{task.today?"− Today":"+ Today"}</button>
-                  </div>
-                </div>
-              ))}
-            </div>;
+            return <PriorityGroup key={pri} projId={proj.id} pri={pri} priTasks={priTasks} priLabel={priLabel} priCol={priCol} completeTask={completeTask} setEditTask={setEditTask} setShowTask={setShowTask} addToToday={addToToday} removeFromToday={removeFromToday} reorderTasks={reorderTasks} isParked={!!proj.parked} setTasks={setTasks}/>;
           })}
         {isOpen&&(()=>{
           const recurProjTasks=pt.filter(t=>t.recur&&!t.doneDate);
