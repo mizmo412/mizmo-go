@@ -427,7 +427,7 @@ function PriorityGroup({projId,pri,priTasks,priLabel,priCol,completeTask,setEdit
     {priTasks.map((task,ti)=>(
       <div key={task.id} ref={el=>stateRef.current.rowEls[ti]=el}
         data-drag="true" style={{display:"flex",alignItems:"flex-start",gap:4,cursor:"grab",userSelect:"none",WebkitUserSelect:"none"}}>
-        <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={isParked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
+        <div style={{flex:1,userSelect:"none",WebkitUserSelect:"none"}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={isParked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
         <div style={{display:"flex",gap:4}}>
           <button onClick={()=>task.today?removeFromToday(task.id):addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:task.today?"#B8941F":C.text3,border:`1px solid ${task.today?"#B8941F":C.border}`,borderRadius:8,background:task.today?C.td2:"transparent",cursor:"pointer"}}>{task.today?"− Today":"+ Today"}</button>
         </div>
@@ -1001,7 +1001,7 @@ function ExportModal({moodData,actData,tasks,projects,moodWords,actWords,coachLo
 }
 
 function App(){
-  useEffect(()=>{const style=document.createElement("style");style.innerHTML=`*{box-sizing:border-box!important;}body,html{margin:0!important;padding:0!important;}[data-drag]{user-select:none!important;-webkit-user-select:none!important;}`;document.head.appendChild(style);return()=>document.head.removeChild(style);},[]);
+  useEffect(()=>{const style=document.createElement("style");style.innerHTML=`*{box-sizing:border-box!important;}body,html{margin:0!important;padding:0!important;}[data-drag],[data-drag] *{user-select:none!important;-webkit-user-select:none!important;touch-action:none!important;}`;document.head.appendChild(style);return()=>document.head.removeChild(style);},[]);
   const [tab,setTab]=useState("coach");const [loaded,setLoaded]=useState(false);const [showExport,setShowExport]=useState(false);const [showSearch,setShowSearch]=useState(false);const [searchQ,setSearchQ]=useState("");
   const [moodData,setMoodData]=useState({});const [actData,setActData]=useState({});const [projects,setProjects]=useState([]);const [tasks,setTasks]=useState([]);const [moodWords,setMoodWords]=useState([]);const [actWords,setActWords]=useState([]);const [coachLogs,setCoachLogs]=useState({});const [coachMemory,setCoachMemory]=useState({insights:[],lastUpdated:null});
   const [moodModal,setMoodModal]=useState(null);const [wordModal,setWordModal]=useState(null);const [checkInDismissed,setCheckInDismissed]=useState(false);const [showSettings,setShowSettings]=useState(false);
