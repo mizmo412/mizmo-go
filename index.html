@@ -759,6 +759,31 @@ function PendingCatchupBanner({coachLogs,onSaveLog}){
 
 const QPS={fitness:"Give me a specific fitness suggestion — one concrete thing I can do this week to improve flexibility, strength, or cardio.",procrastination:"I've been procrastinating. Don't give me tips — ask me ONE thoughtful question to help me understand why.",retired:"I'm retired and sometimes feel like I'm drifting. Help me think about this meaningfully.",moving:"I need to get moving today. Suggest one small, specific physical thing I can do right now.",focus:"Looking at my active tasks, what should I focus on today? Help me pick the most important one or two.",routine:"Help me think about building a daily routine for a retired, project-oriented person who wants structure but not rigidity.",moodact:"What connection do you see between my mood and activity levels based on my data?"};
 
+function CoachMemoryPanel({coachMemory,onUpdateMemory}){
+  const [open,setOpen]=useState(false);
+  if(!coachMemory?.insights?.length)return null;
+  const reversed=[...coachMemory.insights].reverse();
+  return(<div style={{...S.card,marginBottom:18}}>
+    <div style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}} onClick={()=>setOpen(v=>!v)}>
+      <div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600,flex:1}}>🧠 What Coach Remembers</div>
+      <span style={{fontSize:".75rem",color:C.text3}}>{coachMemory.insights.length} note{coachMemory.insights.length!==1?"s":""}</span>
+      <span style={{fontSize:".75rem",color:C.text3,transform:open?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span>
+    </div>
+    {open&&<>
+      <ul style={{margin:"10px 0 0",padding:0,display:"flex",flexDirection:"column",gap:4}}>
+        {reversed.map((ins,ri)=>{const i=coachMemory.insights.length-1-ri;return(<li key={i} style={{fontSize:".83rem",color:C.text2,lineHeight:1.5,display:"flex",alignItems:"flex-start",gap:6,listStyle:"none"}}>
+          <span style={{color:C.accent,flexShrink:0}}>•</span>
+          <span style={{flex:1}}>{ins}</span>
+          <button onClick={e=>{e.stopPropagation();onUpdateMemory({...coachMemory,insights:coachMemory.insights.filter((_,j)=>j!==i)});}} style={{background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:".75rem",flexShrink:0}}>✕</button>
+        </li>);})}
+      </ul>
+      <div style={{marginTop:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:".72rem",color:C.text3}}>Last updated: {coachMemory.lastUpdated?new Date(coachMemory.lastUpdated).toLocaleDateString():"—"}</div>
+        <button onClick={e=>{e.stopPropagation();onUpdateMemory({insights:[],lastUpdated:null});}} style={{fontSize:".72rem",color:C.text3,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Clear all</button>
+      </div>
+    </>}
+  </div>);
+}
 function CoachTab({moodData,actData,tasks,projects,setTasks,coachMemory,onUpdateMemory,coachLogs,onSaveLog,checkInDismissed,onDismissCheckIn,moodWords,onSaveMood,onSaveAct}){
   const [insight,setInsight]=useState("Tap Refresh for your check-in insight.");const [insightLoading,setInsightLoading]=useState(false);const [insightDismissed,setInsightDismissed]=useState(false);const [insightError,setInsightError]=useState("");const [insightSecs,setInsightSecs]=useState(0);const [chatCollapsed,setChatCollapsed]=useState(true);const [patResult,setPatResult]=useState("");const [patLoading,setPatLoading]=useState(false);const [chatHist,setChatHist]=useState([]);const [chatLoaded,setChatLoaded]=useState(false);const [input,setInput]=useState("");const [chatLoading,setChatLoading]=useState(false);const [error,setError]=useState("");const msgsRef=useRef(null);const insightLoadedRef=useRef(false);
   useEffect(()=>{const tl=(coachLogs[todayDS()]||[]).find(l=>l.type==="chat");if(tl)setChatHist(tl.messages);setChatLoaded(true);},[]);
@@ -789,7 +814,7 @@ function CoachTab({moodData,actData,tasks,projects,setTasks,coachMemory,onUpdate
     </>);})()}
     {(coachLogs[todayDS()]||[]).filter(l=>["morning","midday","evening"].includes(l.type)&&l.type!==getCheckInType()&&l.messages?.filter(m=>m.content!=="__pending__").length>0).map((log,i)=>{const cfg2=CI[log.type]||{};return <CoachLogAddon key={i} log={log} dateKey={todayDS()} onSaveLog={onSaveLog} setTasks={setTasks} customLabel={`${cfg2.emoji||""} ${cfg2.label||log.type}`}/>;})}
     {error&&<div style={{background:"#fde8e7",border:`1px solid ${C.pa}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:".83rem",color:C.pa,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span>⚠️ {error}</span><button onClick={()=>setError("")} style={{background:"none",border:"none",cursor:"pointer",color:C.pa,fontWeight:700,fontSize:".8rem"}}>▴ dismiss</button></div>}
-    {(()=>{if(!coachMemory.insights.length)return null;const [memOpen,setMemOpen]=React.useState(false);return(<div style={{...S.card,marginBottom:18}}><div style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}} onClick={()=>setMemOpen(v=>!v)}><div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600,flex:1}}>🧠 What Coach Remembers</div><span style={{fontSize:".75rem",color:C.text3}}>{coachMemory.insights.length} note{coachMemory.insights.length!==1?"s":""}</span><span style={{fontSize:".75rem",color:C.text3,transform:memOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span></div>{memOpen&&<><ul style={{margin:"10px 0 0",padding:"0 0 0 18px",display:"flex",flexDirection:"column",gap:4}}>{coachMemory.insights.map((ins,i)=><li key={i} style={{fontSize:".83rem",color:C.text2,lineHeight:1.5,display:"flex",alignItems:"flex-start",gap:6,listStyle:"none",paddingLeft:0}}><span style={{color:C.accent,flexShrink:0}}>•</span><span>{ins}</span><button onClick={e=>{e.stopPropagation();onUpdateMemory({...coachMemory,insights:coachMemory.insights.filter((_,j)=>j!==i)});}} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:".75rem",flexShrink:0}}>✕</button></li>)}</ul><div style={{marginTop:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{fontSize:".72rem",color:C.text3}}>Last updated: {coachMemory.lastUpdated?new Date(coachMemory.lastUpdated).toLocaleDateString():"—"}</div><button onClick={e=>{e.stopPropagation();onUpdateMemory({insights:[],lastUpdated:null});}} style={{fontSize:".72rem",color:C.text3,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Clear all</button></div></>}</div>);})()}
+    <CoachMemoryPanel coachMemory={coachMemory} onUpdateMemory={onUpdateMemory}/>
     <div style={S.card}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:chatCollapsed?0:12,cursor:"pointer"}} onClick={()=>setChatCollapsed(v=>!v)}>
         <div style={{fontFamily:"Georgia,serif",fontSize:"1rem",fontWeight:600}}>💬 Ask Coach anything</div>
