@@ -412,14 +412,22 @@ function PriorityGroup({projId,pri,priTasks,priLabel,priCol,completeTask,setEdit
       r.idx=null;
     };
 
-    container.addEventListener('touchstart',handleTouchStart,{passive:true});
-    container.addEventListener('touchmove',handleTouchMove,{passive:false});
-    container.addEventListener('touchend',handleTouchEnd,{passive:true});
-
-    return()=>{
-      container.removeEventListener('touchstart',handleTouchStart);
+    const activateDrag=(e)=>{
+      handleTouchStart(e);
+      if(stateRef.current.idx!==null){
+        container.addEventListener('touchmove',handleTouchMove,{passive:false});
+      }
+    };
+    const deactivateDrag=(e)=>{
+      handleTouchEnd(e);
       container.removeEventListener('touchmove',handleTouchMove);
-      container.removeEventListener('touchend',handleTouchEnd);
+    };
+    container.addEventListener('touchstart',activateDrag,{passive:true});
+    container.addEventListener('touchend',deactivateDrag,{passive:true});
+    return()=>{
+      container.removeEventListener('touchstart',activateDrag);
+      container.removeEventListener('touchmove',handleTouchMove);
+      container.removeEventListener('touchend',deactivateDrag);
     };
   },[projId,pri,reorderTasks]);
 
@@ -525,10 +533,11 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
       if(s.idx!==null&&s.rowEls[s.idx])s.rowEls[s.idx].style.opacity='1';
       if(s.ghost){s.ghost.remove();s.ghost=null;}s.idx=null;
     };
-    container.addEventListener('touchstart',onStart,{passive:true});
-    container.addEventListener('touchmove',onMove,{passive:false});
-    container.addEventListener('touchend',onEnd,{passive:true});
-    return()=>{container.removeEventListener('touchstart',onStart);container.removeEventListener('touchmove',onMove);container.removeEventListener('touchend',onEnd);};
+    const activateToday=(e)=>{onStart(e);if(todayTouchState.current.idx!==null){container.addEventListener('touchmove',onMove,{passive:false});}};
+    const deactivateToday=(e)=>{onEnd(e);container.removeEventListener('touchmove',onMove);};
+    container.addEventListener('touchstart',activateToday,{passive:true});
+    container.addEventListener('touchend',deactivateToday,{passive:true});
+    return()=>{container.removeEventListener('touchstart',activateToday);container.removeEventListener('touchmove',onMove);container.removeEventListener('touchend',deactivateToday);};
   },[]);
   useEffect(()=>{
     const container=onDeckContainerRef.current;
@@ -565,10 +574,11 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
       if(s.idx!==null&&s.rowEls[s.idx])s.rowEls[s.idx].style.opacity='1';
       if(s.ghost){s.ghost.remove();s.ghost=null;}s.idx=null;
     };
-    container.addEventListener('touchstart',onStart,{passive:true});
-    container.addEventListener('touchmove',onMove,{passive:false});
-    container.addEventListener('touchend',onEnd,{passive:true});
-    return()=>{container.removeEventListener('touchstart',onStart);container.removeEventListener('touchmove',onMove);container.removeEventListener('touchend',onEnd);};
+    const activateDeck=(e)=>{onStart(e);if(onDeckTouchState.current.idx!==null){container.addEventListener('touchmove',onMove,{passive:false});}};
+    const deactivateDeck=(e)=>{onEnd(e);container.removeEventListener('touchmove',onMove);};
+    container.addEventListener('touchstart',activateDeck,{passive:true});
+    container.addEventListener('touchend',deactivateDeck,{passive:true});
+    return()=>{container.removeEventListener('touchstart',activateDeck);container.removeEventListener('touchmove',onMove);container.removeEventListener('touchend',deactivateDeck);};
   },[]);
   const reorderTasks=(projId,pri,newArr)=>{
     setTasks(prev=>{
