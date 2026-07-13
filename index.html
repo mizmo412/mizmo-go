@@ -357,7 +357,7 @@ function TodayRow({task,projects,onComplete,onEdit,onDelete,onRemoveToday}){
 
 function PriorityGroup({projId,pri,priTasks,priLabel,priCol,completeTask,setEditTask,setShowTask,addToToday,removeFromToday,reorderTasks,isParked,setTasks}){
   const containerRef=useRef(null);
-  const stateRef=useRef({idx:null,ghost:null,startY:0,rowEls:[],tasks:priTasks});
+  const stateRef=useRef({idx:null,ghost:null,startY:0,rowEls:[],handleEls:[],tasks:priTasks});
   stateRef.current.tasks=priTasks;
   const pc=priCol[pri];const isSub=pri==="B"||pri==="C";
 
@@ -368,10 +368,11 @@ function PriorityGroup({projId,pri,priTasks,priLabel,priCol,completeTask,setEdit
     const handleTouchStart=(e)=>{
       const r=stateRef.current;
       const touch=e.touches[0];
-      const el=r.rowEls.find(row=>row&&row.contains(e.target));
-      if(!el)return;
-      const idx=r.rowEls.indexOf(el);
-      if(idx===-1)return;
+      const handle=r.handleEls.find(h=>h&&h.contains(e.target));
+      if(!handle)return;
+      const idx=r.handleEls.indexOf(handle);
+      if(idx===-1||idx>=r.tasks.length)return;
+      const el=r.rowEls[idx];if(!el)return;
       r.idx=idx;
       r.startY=touch.clientY;
       const rect=el.getBoundingClientRect();
@@ -426,8 +427,9 @@ function PriorityGroup({projId,pri,priTasks,priLabel,priCol,completeTask,setEdit
     <div style={{display:"inline-flex",padding:"2px 8px",borderRadius:10,fontSize:".71rem",fontWeight:700,marginBottom:4,background:pc.bg,color:pc.color}}>{priLabel[pri]}</div>
     {priTasks.map((task,ti)=>(
       <div key={task.id} ref={el=>stateRef.current.rowEls[ti]=el}
-        data-drag="true" style={{display:"flex",alignItems:"flex-start",gap:4,cursor:"grab",userSelect:"none",WebkitUserSelect:"none"}}>
-        <div style={{flex:1,userSelect:"none",WebkitUserSelect:"none"}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={isParked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
+        style={{display:"flex",alignItems:"flex-start",gap:4}}>
+        <div ref={el=>stateRef.current.handleEls[ti]=el} style={{color:C.text3,fontSize:"1rem",flexShrink:0,cursor:"grab",userSelect:"none",WebkitUserSelect:"none",padding:"4px 6px 4px 2px",touchAction:"none"}}>⠿</div>
+        <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={isParked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
         <div style={{display:"flex",gap:4}}>
           <button onClick={()=>task.today?removeFromToday(task.id):addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:task.today?"#B8941F":C.text3,border:`1px solid ${task.today?"#B8941F":C.border}`,borderRadius:8,background:task.today?C.td2:"transparent",cursor:"pointer"}}>{task.today?"− Today":"+ Today"}</button>
         </div>
@@ -484,16 +486,20 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
   const recurDragRef=useRef({idx:null});
   const waitDragRef=useRef({idx:null});
   const todayContainerRef=useRef(null);
-  const todayTouchState=useRef({idx:null,ghost:null,startY:0,rowEls:[],tasks:[]});
+  const todayTouchState=useRef({idx:null,ghost:null,startY:0,rowEls:[],handleEls:[],tasks:[]});
+  const onDeckContainerRef=useRef(null);
+  const onDeckTouchState=useRef({idx:null,ghost:null,startY:0,rowEls:[],tasks:[],handleEls:[]});
+  const [onDeckOrder,setOnDeckOrder]=useState(null);
   useEffect(()=>{
     const container=todayContainerRef.current;
     if(!container)return;
     const s=todayTouchState.current;
     const onStart=(e)=>{
-      const el=s.rowEls.find(r=>r&&r.contains(e.target));
-      if(!el)return;
-      const idx=s.rowEls.indexOf(el);
+      const handle=s.handleEls&&s.handleEls.find(h=>h&&h.contains(e.target));
+      if(!handle)return;
+      const idx=s.handleEls.indexOf(handle);
       if(idx===-1||idx>=s.tasks.length)return;
+      const el=s.rowEls[idx];if(!el)return;
       s.idx=idx;s.startY=e.touches[0].clientY;
       const rect=el.getBoundingClientRect();
       const ghost=el.cloneNode(true);
@@ -512,6 +518,46 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
         if(y>=rect.top&&y<=rect.bottom){
           const arr=[...s.tasks];const[m]=arr.splice(s.idx,1);arr.splice(i,0,m);
           reorderToday(arr);s.idx=i;break;
+        }
+      }
+    };
+    const onEnd=()=>{
+      if(s.idx!==null&&s.rowEls[s.idx])s.rowEls[s.idx].style.opacity='1';
+      if(s.ghost){s.ghost.remove();s.ghost=null;}s.idx=null;
+    };
+    container.addEventListener('touchstart',onStart,{passive:true});
+    container.addEventListener('touchmove',onMove,{passive:false});
+    container.addEventListener('touchend',onEnd,{passive:true});
+    return()=>{container.removeEventListener('touchstart',onStart);container.removeEventListener('touchmove',onMove);container.removeEventListener('touchend',onEnd);};
+  },[]);
+  useEffect(()=>{
+    const container=onDeckContainerRef.current;
+    if(!container)return;
+    const s=onDeckTouchState.current;
+    const onStart=(e)=>{
+      const handle=s.handleEls.find(h=>h&&h.contains(e.target));
+      if(!handle)return;
+      const idx=s.handleEls.indexOf(handle);
+      if(idx===-1||idx>=s.tasks.length)return;
+      const el=s.rowEls[idx];if(!el)return;
+      s.idx=idx;s.startY=e.touches[0].clientY;
+      const rect=el.getBoundingClientRect();
+      const ghost=el.cloneNode(true);
+      ghost.style.cssText=`position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:0.75;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.18);border-radius:8px;z-index:9999;pointer-events:none;`;
+      document.body.appendChild(ghost);s.ghost=ghost;el.style.opacity='0.3';
+    };
+    const onMove=(e)=>{
+      if(s.idx===null||!s.ghost)return;
+      e.preventDefault();
+      const y=e.touches[0].clientY;
+      s.ghost.style.top=(parseFloat(s.ghost.style.top)+(y-s.startY))+'px';
+      s.startY=y;
+      for(let i=0;i<s.rowEls.length;i++){
+        if(!s.rowEls[i]||i===s.idx||i>=s.tasks.length)continue;
+        const rect=s.rowEls[i].getBoundingClientRect();
+        if(y>=rect.top&&y<=rect.bottom){
+          const arr=[...s.tasks];const[m]=arr.splice(s.idx,1);arr.splice(i,0,m);
+          setOnDeckOrder(arr.map(t=>t.id));s.tasks=arr;s.idx=i;break;
         }
       }
     };
@@ -548,8 +594,9 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
           {todayTasks.map((task,ti)=>{
             const activeIdx=_todayActive.indexOf(task);
             const isActive=activeIdx!==-1;
-            return(<div key={task.id} ref={isActive?el=>todayTouchState.current.rowEls[activeIdx]=el:null} data-drag="true" style={{userSelect:"none",WebkitUserSelect:"none"}}>
-              <TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday}/>
+            return(<div key={task.id} ref={isActive?el=>todayTouchState.current.rowEls[activeIdx]=el:null} style={{display:"flex",alignItems:"flex-start",gap:4}}>
+              {isActive&&<div ref={el=>todayTouchState.current.handleEls[activeIdx]=el} style={{color:C.text3,fontSize:"1rem",flexShrink:0,cursor:"grab",userSelect:"none",WebkitUserSelect:"none",padding:"6px 6px 4px 2px",touchAction:"none"}}>⠿</div>}
+              <div style={{flex:1}}><TodayRow task={task} projects={projects} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onDelete={id=>setConfirm({type:"task",id,name:task.title})} onRemoveToday={removeFromToday}/></div>
             </div>);
           })}
         </div>)}
@@ -569,18 +616,20 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
         const projATasks=active.filter(x=>x.projectId===t.projectId&&x.priority==="A"&&!x.today&&!x.waiting);
         return projATasks[0]?.id===t.id;
       });
+      const sortedOnDeck=(()=>{const base=onDeckTasks.slice().sort((a,b)=>{const cc=capsSort(a,b);if(cc!==0)return cc;const aHas=!!a.dueDate,bHas=!!b.dueDate;if(aHas&&!bHas)return-1;if(!aHas&&bHas)return 1;if(aHas&&bHas&&a.dueDate!==b.dueDate)return a.dueDate<b.dueDate?-1:1;return 0;});if(!onDeckOrder)return base;const ordered=onDeckOrder.map(id=>base.find(t=>t.id===id)).filter(Boolean);const rest=base.filter(t=>!onDeckOrder.includes(t.id));return[...ordered,...rest];})();
+      onDeckTouchState.current.tasks=sortedOnDeck;
       return onDeckTasks.length>0&&(
       <div style={{background:C.card,border:`1.5px solid ${C.pa}22`,borderRadius:12,marginBottom:14,overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:"#fde8e7"}}>
           <span style={{fontWeight:600,fontSize:".9rem",flex:1,color:C.pa}}>On Deck</span>
         </div>
-        <div style={{padding:"4px 10px 8px"}}>
-          {onDeckTasks.slice().sort((a,b)=>{const cc=capsSort(a,b);if(cc!==0)return cc;const aHas=!!a.dueDate,bHas=!!b.dueDate;if(aHas&&!bHas)return-1;if(!aHas&&bHas)return 1;if(aHas&&bHas&&a.dueDate!==b.dueDate)return a.dueDate<b.dueDate?-1:1;return 0;}).map(task=>(
-            <div key={task.id} style={{display:"flex",alignItems:"flex-start",gap:4}}>
+        <div ref={onDeckContainerRef} style={{padding:"4px 10px 8px"}}>
+          {sortedOnDeck.map((task,ti)=>(
+            <div key={task.id} ref={el=>onDeckTouchState.current.rowEls[ti]=el} style={{display:"flex",alignItems:"flex-start",gap:4}}>
+              <div ref={el=>onDeckTouchState.current.handleEls[ti]=el} style={{color:C.text3,fontSize:"1rem",paddingTop:4,flexShrink:0,cursor:"grab",userSelect:"none",WebkitUserSelect:"none",padding:"4px 6px 4px 2px"}}>⠿</div>
               <div style={{flex:1,minWidth:0}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
               <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0,marginTop:3}}>
                 <button onClick={()=>addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:"#B8941F",border:`1px solid #B8941F`,borderRadius:8,background:C.td2,cursor:"pointer"}}>+ Today</button>
-                {task.onDeck&&<button onClick={()=>setTasks(prev=>prev.map(x=>x.id===task.id?{...x,onDeck:undefined}:x))} style={{padding:"2px 8px",fontSize:".7rem",color:C.text3,border:`1px solid ${C.border}`,borderRadius:8,background:"transparent",cursor:"pointer"}}>− Deck</button>}
               </div>
             </div>
           ))}
