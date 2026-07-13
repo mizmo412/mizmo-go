@@ -271,7 +271,7 @@ function TaskModal({task,projects,defaultProjectId,onSave,onClose,onRemoveToday,
     <FormRow label="When"><select style={S.select} value={pri} onChange={e=>setPri(e.target.value)}><option value="A">Available</option><option value="B">Soon</option><option value="C">Someday</option></select></FormRow>
     <FormRow label="Status">
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!waiting} onChange={e=>setWaiting(e.target.checked)} style={{width:16,height:16}}/><span>⏳ Waiting</span></label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!waiting} onChange={e=>setWaiting(e.target.checked)} style={{width:16,height:16}}/><span>⏸️ Waiting</span></label>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!inProgress} onChange={e=>setInProgress(e.target.checked)} style={{width:16,height:16}}/><span>⏳ In Progress</span></label>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={!!trivial} onChange={e=>setTrivial(e.target.checked)} style={{width:16,height:16}}/><span title="Complete silently">🧹 Trivial</span></label>
         {task&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:".87rem",cursor:"pointer"}}><input type="checkbox" checked={markComplete} onChange={e=>{setMarkComplete(e.target.checked);if(e.target.checked){setInProgress(false);setWaiting(false);}}} style={{width:16,height:16}}/><span>✅ Complete</span></label>}
@@ -491,7 +491,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
             onDragStart={()=>{waitDragRef.current={idx:wi};}}
             onDragOver={e=>{e.preventDefault();const r=waitDragRef.current;if(r.idx===null||r.idx===wi)return;const arr=[...wt];const[m]=arr.splice(r.idx,1);arr.splice(wi,0,m);waitDragRef.current.idx=wi;reorderWaiting(arr);}}
             onDragEnd={()=>{waitDragRef.current={idx:null};}}
-            style={{cursor:"grab"}}><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`}}><span style={{cursor:"pointer",textDecoration:"underline dotted"}} onClick={()=>{setEditTask(task);setShowTask(true);}}>⏳ {task.title}</span>{task.waitingOn&&<div style={{fontSize:".72rem",color:"#4a6a88",marginTop:1}}>↳ {task.waitingOn}</div>}</td><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`,color:"#4a6a88",fontSize:".78rem"}}>{p?.name||"Misc"}</td></tr>;})}</tbody>
+            style={{cursor:"grab"}}><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`}}><span style={{cursor:"pointer",textDecoration:"underline dotted"}} onClick={()=>{setEditTask(task);setShowTask(true);}}>⏸️ {task.title}</span>{task.waitingOn&&<div style={{fontSize:".72rem",color:"#4a6a88",marginTop:1}}>↳ {task.waitingOn}</div>}</td><td style={{padding:"5px 8px",borderBottom:`1px solid #e8f0f8`,color:"#4a6a88",fontSize:".78rem"}}>{p?.name||"Misc"}</td></tr>;})}</tbody>
       </table>}
     </div>);})()}
     {(()=>{const recurTasks=active.filter(t=>t.recur).slice().sort((a,b)=>{
@@ -555,7 +555,7 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
           {proj.completed?<span style={{fontSize:".75rem",color:C.pc,fontWeight:600}}>Completed {proj.completedOn}</span>:<span style={{fontSize:".75rem",color:C.text3}}>{pt.length} task{pt.length!==1?"s":""}</span>}
           <span style={{display:"inline-flex",flexDirection:"column",gap:0,marginLeft:2}}>{arrowBtn("▴",idx===0,()=>moveProject(idx,-1))}{arrowBtn("▾",idx===projects.length-1,()=>moveProject(idx,1))}</span>
           {!proj.completed&&<button style={{...S.btnIcon,marginLeft:4,background:C.accent,borderColor:C.accent,color:"#fff",fontSize:".72rem",fontWeight:600,width:"auto",padding:"0 10px",height:26}} onClick={e=>{e.stopPropagation();setEditTask(null);setAddingTo(proj.id);setAddingToToday(false);setShowTask(true);}}>+ Task</button>}
-          {proj.id!=="misc"&&<button style={{...S.btnIcon,marginLeft:2}} onClick={e=>{e.stopPropagation();setConfirm({type:"project",id:proj.id,name:proj.name});}}>🗑</button>}
+          {proj.id!=="misc"&&!isOpen&&<button style={{...S.btnIcon,marginLeft:2}} onClick={e=>{e.stopPropagation();setConfirm({type:"project",id:proj.id,name:proj.name});}}>🗑</button>}
         </div>
         {isOpen&&<div style={{padding:"4px 10px"}}>
           {pt.length===0&&!proj.completed&&<div style={{color:C.text3,fontSize:".83rem",padding:"4px 0"}}>No tasks yet.</div>}
