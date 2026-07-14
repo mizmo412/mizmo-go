@@ -315,7 +315,7 @@ function TaskRow({task,onComplete,onEdit,dragHandleProps,onSnooze,isParked}){
   const isWaiting=!!task.waiting&&!task.inProgress&&!task.onDeck;
   // stale check moved inline
   return(<div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"3px 4px",borderRadius:6,background:hov?C.bg2:"transparent",transition:"background .12s",opacity:isWaiting?.7:1}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
-    {dragHandleProps&&<div {...dragHandleProps} style={{cursor:"grab",color:C.text3,fontSize:".85rem",paddingTop:1,flexShrink:0,userSelect:"none"}} title="Drag to reorder">⠿</div>}
+    
     <div onClick={()=>onComplete(task.id)} style={{width:16,height:16,border:`2px solid ${C.border}`,borderRadius:4,cursor:"pointer",flexShrink:0,marginTop:2}}/>
     <div style={{flex:1,minWidth:0}}>
       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -438,7 +438,7 @@ function PriorityGroup({projId,pri,priTasks,priLabel,priCol,completeTask,setEdit
       <div key={task.id} ref={el=>stateRef.current.rowEls[ti]=el}
         style={{display:"flex",alignItems:"flex-start",gap:4}}>
         <div ref={el=>stateRef.current.handleEls[ti]=el} style={{color:C.text3,fontSize:"1rem",flexShrink:0,cursor:"grab",userSelect:"none",WebkitUserSelect:"none",padding:"4px 6px 4px 2px",touchAction:"none"}}>⠿</div>
-        <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} dragHandleProps={{}} isParked={isParked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
+        <div style={{flex:1}}><TaskRow task={task} onComplete={completeTask} onEdit={t=>{setEditTask(t);setShowTask(true);}} isParked={isParked} onSnooze={id=>setTasks(prev=>prev.map(x=>x.id===id?{...x,snoozedUntil:new Date(Date.now()+10*24*60*60*1000).toISOString().slice(0,10)}:x))}/></div>
         <div style={{display:"flex",gap:4}}>
           <button onClick={()=>task.today?removeFromToday(task.id):addToToday(task.id)} style={{padding:"2px 8px",fontSize:".7rem",fontWeight:600,color:task.today?"#B8941F":C.text3,border:`1px solid ${task.today?"#B8941F":C.border}`,borderRadius:8,background:task.today?C.td2:"transparent",cursor:"pointer"}}>{task.today?"− Today":"+ Today"}</button>
         </div>
@@ -782,22 +782,35 @@ setTasks(prev=>prev.map(x=>x.id===id?{...x,progressedOn:undefined,completedOn:un
           <span style={{fontSize:".75rem",color:"#4a6a48"}}>{completedProjs.length} project{completedProjs.length!==1?"s":""}</span>
           <span style={{color:"#4a6a48",marginLeft:4,transform:compOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span>
         </div>
-        {compOpen&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:".83rem"}}>
-          <thead><tr>
-            <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Project</th>
-            <th style={{textAlign:"left",padding:"5px 12px",borderBottom:`1px solid #c8d8b8`,fontSize:".72rem",fontWeight:600,textTransform:"uppercase",color:"#4a6a48"}}>Done On</th>
-            <th style={{padding:"5px 12px",borderBottom:`1px solid #c8d8b8`}}></th>
-          </tr></thead>
-          <tbody>{completedProjs.map((p,i)=>(
-            <tr key={p.id} style={{background:i%2===0?"#f4faf4":C.card}}>
-              <td style={{padding:"6px 12px",color:C.text,fontSize:".85rem"}}>{p.name}</td>
-              <td style={{padding:"6px 12px",color:C.text3,fontSize:".82rem"}}>{p.completedOn||"—"}</td>
-              <td style={{padding:"6px 12px",textAlign:"right"}}>
-                <button onClick={()=>setProjects(projects.map(x=>x.id===p.id?{...x,completed:false,completedOn:undefined}:x))} style={{fontSize:".72rem",color:C.text3,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>Reopen</button>
-              </td>
-            </tr>
-          ))}</tbody>
-        </table>}
+        {compOpen&&<div style={{padding:"6px 10px 8px"}}>
+          {completedProjs.map((p,i)=>{
+            const projTasks=tasks.filter(t=>t.projectId===p.id&&t.doneDate&&t.doneDate!=="trivial").sort((a,b)=>b.doneDate.localeCompare(a.doneDate));
+            const projKey="__comp__"+p.id;
+            const projOpen=collapsed[projKey]===true;
+            return(<div key={p.id} style={{border:`1px solid #c8d8b8`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#f4faf4",cursor:"pointer"}} onClick={()=>setCollapsed(c=>({...c,[projKey]:!c[projKey]}))}>
+                <span style={{fontFamily:"Georgia,serif",fontWeight:600,fontSize:".88rem",color:"#2a4a28",flex:1}}>✅ {p.name}</span>
+                <span style={{fontSize:".72rem",color:"#4a6a48"}}>{p.completedOn||"—"}</span>
+                <span style={{fontSize:".72rem",color:"#4a6a48",marginLeft:6}}>{projTasks.length} task{projTasks.length!==1?"s":""}</span>
+                <span style={{color:"#4a6a48",marginLeft:4,transform:projOpen?"":"rotate(-90deg)",display:"inline-block",transition:"transform .2s"}}>▾</span>
+              </div>
+              {projOpen&&<div style={{padding:"4px 10px 8px"}}>
+                {projTasks.length===0&&<div style={{fontSize:".82rem",color:C.text3,padding:"6px 0",fontStyle:"italic"}}>No completed tasks recorded.</div>}
+                {projTasks.map(t=><div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"5px 0",borderBottom:`1px solid #e8f4e6`}}>
+                  <span style={{color:"#4a6a48",fontSize:".8rem",flexShrink:0,marginTop:1}}>✓</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:".84rem",color:C.text2,textDecoration:"line-through",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+                    {t.notes&&<div style={{fontSize:".72rem",color:C.text3,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.notes}</div>}
+                  </div>
+                  <span style={{fontSize:".72rem",color:C.text3,flexShrink:0}}>{t.doneDate}</span>
+                </div>)}
+                <div style={{marginTop:8,textAlign:"right"}}>
+                  <button onClick={()=>setProjects(projects.map(x=>x.id===p.id?{...x,completed:false,completedOn:undefined}:x))} style={{fontSize:".72rem",color:C.text3,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>Reopen Project</button>
+                </div>
+              </div>}
+            </div>);
+          })}
+        </div>}
       </div>);
     })()}
     {confirm&&<Confirm title={confirm.type==="project"?"Delete Project?":"Delete Task?"} body={`Delete "${confirm.name}"?${confirm.type==="project"?" All tasks inside will also be deleted.":""}`} onOk={doDelete} onCancel={()=>setConfirm(null)}/>}
